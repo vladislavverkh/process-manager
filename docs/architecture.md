@@ -2,8 +2,8 @@
 
 `process-manager` разделяет описание бизнес-сценариев, durable state и асинхронное исполнение.
 
-Главный принцип: PostgreSQL хранит единственное актуальное состояние процесса, а очередь хранит
-только намерение продолжить процесс.
+Главный принцип: PostgreSQL хранит единственное актуальное состояние процесса, а исполнитель команд
+хранит только намерение продолжить процесс.
 
 ## Модули
 
@@ -11,7 +11,7 @@
 | --- | --- |
 | `process-manager-core` | Process definition, state model, conditional transitions, retry/retention contracts |
 | `process-manager-postgres` | Таблицы и repository для process instances, waits, event inbox и history |
-| `process-manager-task-queue` | Опциональный adapter, который ставит process commands в `task-queue-postgres` |
+| `process-manager-task-queue` | Опциональный adapter-код для приложений, которые явно связывают process-manager и `task-queue-postgres` |
 | `process-manager-spring-boot-starter` | Autoconfiguration runtime-компонентов |
 | `process-manager-rest` | REST endpoints для диагностики и ручных операторских действий |
 | `process-manager-testkit` | Assertions/helpers для тестирования process definitions |
@@ -37,9 +37,9 @@ PostgresProcessRepository
   v
 ProcessCommandScheduler
   |
-  | durable command delivery
+  | application-provided durable command delivery
   v
-task-queue-postgres / another command executor
+task-queue-postgres / Kafka / another command executor
 
 ProcessDeadlineWatchdog periodically scans `pm_process_instance` for expired
 `process_deadline_at`/`state_deadline_at` rows and schedules timeout commands only for rows that are
@@ -55,7 +55,7 @@ already overdue.
 3. Runtime creates `pm_process_instance` with initial state, если активный instance с таким
    `processType + businessKey` еще не существует.
 4. Runtime schedules `ProcessCommand(reason=START)` through `ProcessCommandScheduler`.
-5. Task queue worker later executes the command and resumes the instance.
+5. Command executor later executes the command and resumes the instance.
 
 Повторный `start` для уже активного instance возвращает существующий `instance_id` и не планирует
 дополнительный `START`.
@@ -107,13 +107,11 @@ Queue payload должен быть маленьким и техническим
 - retry/timeout;
 - историю и retention.
 
-Adapter к `task-queue-postgres` отвечает за:
+Adapter-классы к `task-queue-postgres` отвечают за:
 
-- durable delivery команд исполнения;
-- partition ordering по business key;
-- lease/ownership worker'ов;
-- delayed retry commands и обычные resume/timeout commands;
-- backpressure на уровне очереди.
+- постановку `ProcessCommand` в `task-queue-postgres`;
+- единый task type для команд process-manager;
+- обработчик queue task, который вызывает `ProcessManager.resume(command)`.
 
 Другие реализации могут подключиться через свой `ProcessCommandScheduler` и свой command handler,
 который вызывает `ProcessManager.resume(command)`.

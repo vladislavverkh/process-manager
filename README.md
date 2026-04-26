@@ -7,7 +7,8 @@
 
 Библиотека проектируется как state-machine/process-orchestrator поверх PostgreSQL. Для
 асинхронного исполнения и отложенного resume runtime использует абстракцию
-`ProcessCommandScheduler`; `task-queue-postgres` подключается отдельным adapter-модулем.
+`ProcessCommandScheduler`. Приложение само выбирает реализацию этой абстракции: task queue,
+Kafka, scheduler в другой БД или собственный executor.
 
 ## Статус проекта
 
@@ -16,7 +17,7 @@
 - есть Gradle multi-module skeleton;
 - есть core-модель definition/state/transition/retry/retention;
 - есть PostgreSQL schema и repository для instance/wait/inbox/history;
-- есть опциональный task-queue adapter для durable process commands;
+- есть опциональные adapter-классы для ручной интеграции с `task-queue-postgres`;
 - есть Spring Boot autoconfiguration;
 - есть базовый execution loop для `ACTION`, `WAIT`, `DECISION`, terminal states, history и stale
   commands;
@@ -49,22 +50,24 @@
 
 - `process-manager-core` - модель процесса, DSL и runtime contracts.
 - `process-manager-postgres` - PostgreSQL-хранилище instance, wait, inbox и history.
-- `process-manager-task-queue` - опциональный adapter к `task-queue-postgres`.
+- `process-manager-task-queue` - опциональный adapter к `task-queue-postgres` для приложений,
+  которые явно используют обе библиотеки.
 - `process-manager-spring-boot-starter` - Spring Boot autoconfiguration.
 - `process-manager-rest` - REST API для диагностики и ручных операторских действий.
 - `process-manager-testkit` - test helpers для process definitions.
 
 ## Локальная сборка
 
-`process-manager-task-queue` включается в Gradle build только если рядом есть
-`../task-queue-postgres` или если задано свойство:
-
-```kotlin
-./gradlew check -PprocessManager.includeTaskQueueAdapter=true
-```
-
-Базовая проверка без adapter-а:
+Базовая проверка не требует `task-queue-postgres`:
 
 ```bash
-./gradlew check -PprocessManager.includeTaskQueueAdapter=false
+./gradlew check
+```
+
+`process-manager-task-queue` не включается в Gradle build автоматически. Если нужно проверить
+adapter-модуль, сначала опубликуйте `task-queue-core` как обычную зависимость, например в
+`mavenLocal`, после чего модуль можно включить явно:
+
+```bash
+./gradlew :process-manager-task-queue:check -PprocessManager.includeTaskQueueAdapter=true
 ```

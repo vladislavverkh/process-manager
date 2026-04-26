@@ -125,8 +125,9 @@ void processDeadlines() {
 
 ## Интеграция с task-queue-postgres
 
-Приложение может подключить `process-manager-task-queue` и `task-queue-postgres` starter. Тогда
-adapter создаст `ProcessCommandScheduler` и `ProcessCommandTaskHandler` поверх `TaskProducer`.
+`process-manager-spring-boot-starter` не связывает runtime с конкретной очередью. Приложение должно
+само объявить `ProcessCommandScheduler`. Если используется `task-queue-postgres`, можно подключить
+adapter-классы и зарегистрировать их вручную.
 
 Минимальный набор:
 
@@ -134,6 +135,26 @@ adapter создаст `ProcessCommandScheduler` и `ProcessCommandTaskHandler` 
 implementation("dev.verkhovskiy:task-queue-spring-boot-starter")
 implementation("dev.verkhovskiy:process-manager-spring-boot-starter")
 implementation("dev.verkhovskiy:process-manager-task-queue")
+```
+
+Пример конфигурации:
+
+```java
+@Configuration
+class ProcessManagerTaskQueueConfiguration {
+
+  @Bean
+  ProcessCommandScheduler processCommandScheduler(
+      TaskProducer taskProducer, ObjectMapper objectMapper) {
+    return new TaskQueueProcessCommandScheduler(taskProducer, objectMapper);
+  }
+
+  @Bean
+  ProcessCommandTaskHandler processCommandTaskHandler(
+      ProcessManager processManager, ObjectMapper objectMapper) {
+    return new ProcessCommandTaskHandler(processManager, objectMapper);
+  }
+}
 ```
 
 Если нужна другая очередь, приложение может не подключать `process-manager-task-queue` и объявить

@@ -1,6 +1,7 @@
 # Интеграция с task-queue-postgres
 
-`process-manager-task-queue` использует `task-queue-postgres` как durable executor.
+`process-manager-task-queue` содержит adapter-классы, которые позволяют использовать
+`task-queue-postgres` как durable executor.
 
 Это опциональный adapter. Базовый runtime зависит только от `ProcessCommandScheduler`, поэтому
 другая инфраструктура команд может подключиться своей реализацией этого интерфейса.
@@ -13,25 +14,36 @@ implementation("dev.verkhovskiy:process-manager-spring-boot-starter")
 implementation("dev.verkhovskiy:process-manager-task-queue")
 ```
 
-Для локальной разработки модуль `process-manager-task-queue` включается в Gradle build, если рядом
-есть `../task-queue-postgres`. Явное управление:
+`process-manager-task-queue` не включается в Gradle build автоматически и не подключает соседний
+`../task-queue-postgres`. Для локальной проверки adapter-модуля `task-queue-core` должен быть
+доступен как обычная опубликованная зависимость, например через `mavenLocal`. После этого модуль
+включается явно:
 
 ```bash
-./gradlew check -PprocessManager.includeTaskQueueAdapter=false
-./gradlew check -PprocessManager.includeTaskQueueAdapter=true
+./gradlew :process-manager-task-queue:check -PprocessManager.includeTaskQueueAdapter=true
 ```
 
-## Autoconfiguration
+## Ручная конфигурация
 
-Adapter создает:
+Adapter не содержит Spring Boot autoconfiguration. Приложение, которое использует обе библиотеки,
+само объявляет связь между ними:
 
-- `ProcessCommandScheduler`, если есть `TaskProducer`;
-- `ProcessCommandTaskHandler`, если есть `ProcessManager`.
+```java
+@Configuration
+class ProcessManagerTaskQueueConfiguration {
 
-Отключение:
+  @Bean
+  ProcessCommandScheduler processCommandScheduler(
+      TaskProducer taskProducer, ObjectMapper objectMapper) {
+    return new TaskQueueProcessCommandScheduler(taskProducer, objectMapper);
+  }
 
-```properties
-process.manager.task-queue.enabled=false
+  @Bean
+  ProcessCommandTaskHandler processCommandTaskHandler(
+      ProcessManager processManager, ObjectMapper objectMapper) {
+    return new ProcessCommandTaskHandler(processManager, objectMapper);
+  }
+}
 ```
 
 ## Task type

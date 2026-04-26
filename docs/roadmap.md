@@ -20,7 +20,7 @@
   - `pm_process_event_inbox`
   - `pm_process_history`
 - Repository для основных SQL-операций.
-- Optional task queue adapter:
+- Optional task queue adapter classes:
   - `TaskQueueProcessCommandScheduler`
   - `ProcessCommandTaskHandler`
 - Spring Boot autoconfiguration.

@@ -87,6 +87,16 @@ condition
 повторно блокирует instance, проверяет актуальную `version` и переводит процесс только если дедлайн
 все еще актуален.
 
+Java не поддерживает named arguments, поэтому DSL поддерживает readable builder-style overloads:
+
+- `processTimeout(timeout -> timeout.duration(...).targetState(...))`;
+- `actionState("STATE", state -> state.action(...).transition(...))`;
+- `waitState("STATE", state -> state.eventType(...).correlationKey(...).waitTimeout(...))`;
+- `transition(t -> t.name(...).targetState(...).condition(...))`.
+
+Позиционные overloads остаются для обратной совместимости, но для новых definitions лучше
+использовать builder-style.
+
 ## Пример definition
 
 ```java
@@ -97,41 +107,52 @@ ProcessDefinition<PaymentPayload> payment =
         .version(1)
         .payloadSchemaVersion(1)
         .initialState("SEND_PAYMENT")
-        .processTimeout(Duration.ofHours(2), "TECHNICAL_FAILURE")
+        .processTimeout(
+            timeout -> timeout.duration(Duration.ofHours(2)).targetState("TECHNICAL_FAILURE"))
         .actionState(
             "SEND_PAYMENT",
-            ctx -> sendPayment(ctx.payload()),
             state ->
                 state
+                    .action(ctx -> sendPayment(ctx.payload()))
                     .retry(RetryPolicy.exponential(3, Duration.ofSeconds(1), Duration.ofMinutes(1)))
                     .transition(
-                        "completed-sync",
-                        "DONE",
-                        ctx -> ctx.resultCodeEquals("COMPLETED"))
+                        transition ->
+                            transition
+                                .name("completed-sync")
+                                .targetState("DONE")
+                                .condition(ctx -> ctx.resultCodeEquals("COMPLETED")))
                     .transition(
-                        "accepted-async",
-                        "WAIT_PAYMENT_RESULT",
-                        ctx -> ctx.resultCodeEquals("ACCEPTED"))
+                        transition ->
+                            transition
+                                .name("accepted-async")
+                                .targetState("WAIT_PAYMENT_RESULT")
+                                .condition(ctx -> ctx.resultCodeEquals("ACCEPTED")))
                     .transition(
-                        "rejected",
-                        "FAILED",
-                        ctx -> ctx.resultCodeEquals("REJECTED"))
+                        transition ->
+                            transition
+                                .name("rejected")
+                                .targetState("FAILED")
+                                .condition(ctx -> ctx.resultCodeEquals("REJECTED")))
                     .otherwise("TECHNICAL_FAILURE"))
         .waitState(
             "WAIT_PAYMENT_RESULT",
-            "payment.result",
-            ctx -> ctx.payload().paymentId(),
-            Duration.ofHours(1),
             state ->
                 state
+                    .eventType("payment.result")
+                    .correlationKey(ctx -> ctx.payload().paymentId())
+                    .waitTimeout(Duration.ofHours(1))
                     .transition(
-                        "approved",
-                        "DONE",
-                        ctx -> ctx.eventFieldEquals("status", "APPROVED"))
+                        transition ->
+                            transition
+                                .name("approved")
+                                .targetState("DONE")
+                                .condition(ctx -> ctx.eventFieldEquals("status", "APPROVED")))
                     .transition(
-                        "declined",
-                        "FAILED",
-                        ctx -> ctx.eventFieldEquals("status", "DECLINED"))
+                        transition ->
+                            transition
+                                .name("declined")
+                                .targetState("FAILED")
+                                .condition(ctx -> ctx.eventFieldEquals("status", "DECLINED")))
                     .timeoutTransition("TECHNICAL_FAILURE")
                     .otherwise("TECHNICAL_FAILURE"))
         .terminalState("DONE", ProcessInstanceStatus.COMPLETED)

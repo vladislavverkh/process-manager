@@ -45,12 +45,30 @@ public final class ProcessDefinitionBuilder<P> {
     return this;
   }
 
+  /**
+   * @deprecated Для новых definitions используйте {@link #processTimeout(Consumer)}, чтобы явно
+   *     назвать duration и targetState.
+   */
+  @Deprecated(since = "0.0.1", forRemoval = false)
   public ProcessDefinitionBuilder<P> processTimeout(Duration timeout, String targetState) {
     this.processTimeout = timeout;
     this.processTimeoutTargetState = targetState;
     return this;
   }
 
+  public ProcessDefinitionBuilder<P> processTimeout(Consumer<TimeoutBuilder> timeout) {
+    TimeoutBuilder builder = new TimeoutBuilder();
+    timeout.accept(builder);
+    this.processTimeout = builder.duration;
+    this.processTimeoutTargetState = builder.targetState;
+    return this;
+  }
+
+  /**
+   * @deprecated Для новых definitions используйте {@link #actionState(String, Consumer)} и
+   *     задавайте action через {@link StateBuilder#action(ProcessAction)}.
+   */
+  @Deprecated(since = "0.0.1", forRemoval = false)
   public ProcessDefinitionBuilder<P> actionState(
       String name, ProcessAction<P> action, Consumer<StateBuilder<P>> transitions) {
     StateBuilder<P> builder = new StateBuilder<P>(name, StateKind.ACTION).action(action);
@@ -59,6 +77,19 @@ public final class ProcessDefinitionBuilder<P> {
     return this;
   }
 
+  public ProcessDefinitionBuilder<P> actionState(
+      String name, Consumer<StateBuilder<P>> definition) {
+    StateBuilder<P> builder = new StateBuilder<>(name, StateKind.ACTION);
+    definition.accept(builder);
+    add(builder.build());
+    return this;
+  }
+
+  /**
+   * @deprecated Для новых definitions используйте {@link #waitState(String, Consumer)} и задавайте
+   *     eventType, correlationKey и waitTimeout именованными методами.
+   */
+  @Deprecated(since = "0.0.1", forRemoval = false)
   public ProcessDefinitionBuilder<P> waitState(
       String name,
       String eventType,
@@ -71,6 +102,13 @@ public final class ProcessDefinitionBuilder<P> {
             .correlationKeyResolver(correlationKeyResolver)
             .waitTimeout(timeout);
     transitions.accept(builder);
+    add(builder.build());
+    return this;
+  }
+
+  public ProcessDefinitionBuilder<P> waitState(String name, Consumer<StateBuilder<P>> definition) {
+    StateBuilder<P> builder = new StateBuilder<>(name, StateKind.WAIT);
+    definition.accept(builder);
     add(builder.build());
     return this;
   }
@@ -133,9 +171,42 @@ public final class ProcessDefinitionBuilder<P> {
       return this;
     }
 
+    public StateBuilder<P> action(ProcessAction<P> action) {
+      this.action = action;
+      return this;
+    }
+
+    public StateBuilder<P> eventType(String eventType) {
+      this.eventType = eventType;
+      return this;
+    }
+
+    public StateBuilder<P> correlationKey(CorrelationKeyResolver<P> correlationKeyResolver) {
+      this.correlationKeyResolver = correlationKeyResolver;
+      return this;
+    }
+
+    public StateBuilder<P> waitTimeout(Duration waitTimeout) {
+      this.waitTimeout = waitTimeout;
+      return this;
+    }
+
+    /**
+     * @deprecated Для новых definitions используйте {@link #timeout(Consumer)}, чтобы явно назвать
+     *     duration и targetState.
+     */
+    @Deprecated(since = "0.0.1", forRemoval = false)
     public StateBuilder<P> timeout(Duration timeout, String targetState) {
       this.stateTimeout = timeout;
       this.timeoutTargetState = targetState;
+      return this;
+    }
+
+    public StateBuilder<P> timeout(Consumer<TimeoutBuilder> timeout) {
+      TimeoutBuilder builder = new TimeoutBuilder();
+      timeout.accept(builder);
+      this.stateTimeout = builder.duration;
+      this.timeoutTargetState = builder.targetState;
       return this;
     }
 
@@ -144,11 +215,28 @@ public final class ProcessDefinitionBuilder<P> {
       return this;
     }
 
+    /**
+     * @deprecated Для новых definitions используйте {@link #transition(Consumer)}, чтобы явно
+     *     назвать name, targetState и condition.
+     */
+    @Deprecated(since = "0.0.1", forRemoval = false)
     public StateBuilder<P> transition(
         String name, String targetState, TransitionCondition<P> condition) {
       return transition(name, targetState, transitions.size(), condition);
     }
 
+    public StateBuilder<P> transition(Consumer<TransitionBuilder<P>> transition) {
+      TransitionBuilder<P> builder = new TransitionBuilder<>(transitions.size());
+      transition.accept(builder);
+      transitions.add(builder.build());
+      return this;
+    }
+
+    /**
+     * @deprecated Для новых definitions используйте {@link #transition(Consumer)}, чтобы явно
+     *     назвать name, targetState, priority и condition.
+     */
+    @Deprecated(since = "0.0.1", forRemoval = false)
     public StateBuilder<P> transition(
         String name, String targetState, int priority, TransitionCondition<P> condition) {
       transitions.add(new TransitionDefinition<>(name, targetState, priority, condition));
@@ -160,24 +248,9 @@ public final class ProcessDefinitionBuilder<P> {
       return this;
     }
 
-    private StateBuilder<P> action(ProcessAction<P> action) {
-      this.action = action;
-      return this;
-    }
-
-    private StateBuilder<P> eventType(String eventType) {
-      this.eventType = eventType;
-      return this;
-    }
-
     private StateBuilder<P> correlationKeyResolver(
         CorrelationKeyResolver<P> correlationKeyResolver) {
       this.correlationKeyResolver = correlationKeyResolver;
-      return this;
-    }
-
-    private StateBuilder<P> waitTimeout(Duration waitTimeout) {
-      this.waitTimeout = waitTimeout;
       return this;
     }
 
@@ -199,6 +272,60 @@ public final class ProcessDefinitionBuilder<P> {
           retryPolicy,
           terminalStatus,
           transitions);
+    }
+  }
+
+  /** Построитель timeout policy с явными именами полей. */
+  public static final class TimeoutBuilder {
+
+    private Duration duration;
+    private String targetState;
+
+    public TimeoutBuilder duration(Duration duration) {
+      this.duration = duration;
+      return this;
+    }
+
+    public TimeoutBuilder targetState(String targetState) {
+      this.targetState = targetState;
+      return this;
+    }
+  }
+
+  /** Построитель transition с явными именами полей. */
+  public static final class TransitionBuilder<P> {
+
+    private String name;
+    private String targetState;
+    private int priority;
+    private TransitionCondition<P> condition;
+
+    private TransitionBuilder(int priority) {
+      this.priority = priority;
+    }
+
+    public TransitionBuilder<P> name(String name) {
+      this.name = name;
+      return this;
+    }
+
+    public TransitionBuilder<P> targetState(String targetState) {
+      this.targetState = targetState;
+      return this;
+    }
+
+    public TransitionBuilder<P> priority(int priority) {
+      this.priority = priority;
+      return this;
+    }
+
+    public TransitionBuilder<P> condition(TransitionCondition<P> condition) {
+      this.condition = condition;
+      return this;
+    }
+
+    private TransitionDefinition<P> build() {
+      return new TransitionDefinition<>(name, targetState, priority, condition);
     }
   }
 }

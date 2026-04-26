@@ -61,8 +61,15 @@ class PaymentProcessConfiguration {
         .initialState("SEND_PAYMENT")
         .actionState(
             "SEND_PAYMENT",
-            actions::sendPayment,
-            state -> state.transition("accepted", "WAIT_RESULT", ctx -> ctx.resultCodeEquals("ACCEPTED")))
+            state ->
+                state
+                    .action(actions::sendPayment)
+                    .transition(
+                        transition ->
+                            transition
+                                .name("accepted")
+                                .targetState("WAIT_RESULT")
+                                .condition(ctx -> ctx.resultCodeEquals("ACCEPTED"))))
         .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
         .build();
   }

@@ -55,7 +55,8 @@ ProcessDefinition<PaymentPayload> paymentProcess(PaymentActions actions) {
       .version(1)
       .payloadSchemaVersion(1)
       .initialState("SEND_PAYMENT")
-      .processTimeout(Duration.ofHours(2), "TECHNICAL_FAILURE")
+      .processTimeout(
+          timeout -> timeout.duration(Duration.ofHours(2)).targetState("TECHNICAL_FAILURE"))
       .retention(
           new ProcessRetention(
               Duration.ofDays(30),
@@ -63,23 +64,48 @@ ProcessDefinition<PaymentPayload> paymentProcess(PaymentActions actions) {
               Duration.ofDays(90)))
       .actionState(
           "SEND_PAYMENT",
-          actions::sendPayment,
           state ->
               state
+                  .action(actions::sendPayment)
                   .retry(RetryPolicy.exponential(3, Duration.ofSeconds(1), Duration.ofMinutes(1)))
-                  .transition("completed-sync", "DONE", ctx -> ctx.resultCodeEquals("COMPLETED"))
-                  .transition("accepted-async", "WAIT_PAYMENT_RESULT", ctx -> ctx.resultCodeEquals("ACCEPTED"))
-                  .transition("rejected", "FAILED", ctx -> ctx.resultCodeEquals("REJECTED"))
+                  .transition(
+                      transition ->
+                          transition
+                              .name("completed-sync")
+                              .targetState("DONE")
+                              .condition(ctx -> ctx.resultCodeEquals("COMPLETED")))
+                  .transition(
+                      transition ->
+                          transition
+                              .name("accepted-async")
+                              .targetState("WAIT_PAYMENT_RESULT")
+                              .condition(ctx -> ctx.resultCodeEquals("ACCEPTED")))
+                  .transition(
+                      transition ->
+                          transition
+                              .name("rejected")
+                              .targetState("FAILED")
+                              .condition(ctx -> ctx.resultCodeEquals("REJECTED")))
                   .otherwise("TECHNICAL_FAILURE"))
       .waitState(
           "WAIT_PAYMENT_RESULT",
-          "payment.result",
-          ctx -> ctx.payload().paymentId(),
-          Duration.ofHours(1),
           state ->
               state
-                  .transition("approved", "DONE", ctx -> ctx.eventFieldEquals("status", "APPROVED"))
-                  .transition("declined", "FAILED", ctx -> ctx.eventFieldEquals("status", "DECLINED"))
+                  .eventType("payment.result")
+                  .correlationKey(ctx -> ctx.payload().paymentId())
+                  .waitTimeout(Duration.ofHours(1))
+                  .transition(
+                      transition ->
+                          transition
+                              .name("approved")
+                              .targetState("DONE")
+                              .condition(ctx -> ctx.eventFieldEquals("status", "APPROVED")))
+                  .transition(
+                      transition ->
+                          transition
+                              .name("declined")
+                              .targetState("FAILED")
+                              .condition(ctx -> ctx.eventFieldEquals("status", "DECLINED")))
                   .timeoutTransition("TECHNICAL_FAILURE")
                   .otherwise("TECHNICAL_FAILURE"))
       .terminalState("DONE", ProcessInstanceStatus.COMPLETED)

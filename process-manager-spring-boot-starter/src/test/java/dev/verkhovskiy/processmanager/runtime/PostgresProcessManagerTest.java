@@ -70,12 +70,21 @@ class PostgresProcessManagerTest {
                 new ProcessRetention(Duration.ofDays(1), Duration.ofDays(2), Duration.ofDays(3)))
             .actionState(
                 "SEND",
-                ctx -> {
-                  seenPayload.set(ctx.payload());
-                  return StepResult.success("OK", Map.of("providerPaymentId", "provider-1"))
-                      .withVariable("operationId", "operation-1");
-                },
-                state -> state.transition("sent", "DONE", ctx -> ctx.resultCodeEquals("OK")))
+                state ->
+                    state
+                        .action(
+                            ctx -> {
+                              seenPayload.set(ctx.payload());
+                              return StepResult.success(
+                                      "OK", Map.of("providerPaymentId", "provider-1"))
+                                  .withVariable("operationId", "operation-1");
+                            })
+                        .transition(
+                            transition ->
+                                transition
+                                    .name("sent")
+                                    .targetState("DONE")
+                                    .condition(ctx -> ctx.resultCodeEquals("OK"))))
             .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
             .build();
     PostgresProcessManager manager = manager(definition);
@@ -134,18 +143,28 @@ class PostgresProcessManagerTest {
             .initialState("SEND")
             .actionState(
                 "SEND",
-                ctx -> StepResult.success("ACCEPTED"),
                 state ->
-                    state.transition(
-                        "accepted", "WAIT_RESULT", ctx -> ctx.resultCodeEquals("ACCEPTED")))
+                    state
+                        .action(ctx -> StepResult.success("ACCEPTED"))
+                        .transition(
+                            transition ->
+                                transition
+                                    .name("accepted")
+                                    .targetState("WAIT_RESULT")
+                                    .condition(ctx -> ctx.resultCodeEquals("ACCEPTED"))))
             .waitState(
                 "WAIT_RESULT",
-                "payment.result",
-                ctx -> ctx.payload().paymentId(),
-                timeout,
                 state ->
-                    state.transition(
-                        "approved", "DONE", ctx -> ctx.eventFieldEquals("status", "APPROVED")))
+                    state
+                        .eventType("payment.result")
+                        .correlationKey(ctx -> ctx.payload().paymentId())
+                        .waitTimeout(timeout)
+                        .transition(
+                            transition ->
+                                transition
+                                    .name("approved")
+                                    .targetState("DONE")
+                                    .condition(ctx -> ctx.eventFieldEquals("status", "APPROVED"))))
             .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
             .build();
     PostgresProcessManager manager = manager(definition);
@@ -183,12 +202,17 @@ class PostgresProcessManagerTest {
             .initialState("WAIT_RESULT")
             .waitState(
                 "WAIT_RESULT",
-                "payment.result",
-                ctx -> ctx.payload().paymentId(),
-                Duration.ofMinutes(5),
                 state ->
-                    state.transition(
-                        "approved", "DONE", ctx -> ctx.eventFieldEquals("status", "APPROVED")))
+                    state
+                        .eventType("payment.result")
+                        .correlationKey(ctx -> ctx.payload().paymentId())
+                        .waitTimeout(Duration.ofMinutes(5))
+                        .transition(
+                            transition ->
+                                transition
+                                    .name("approved")
+                                    .targetState("DONE")
+                                    .condition(ctx -> ctx.eventFieldEquals("status", "APPROVED"))))
             .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
             .build();
     PostgresProcessManager manager = manager(definition);
@@ -253,24 +277,37 @@ class PostgresProcessManagerTest {
             .initialState("SEND")
             .actionState(
                 "SEND",
-                ctx ->
-                    StepResult.success("OK", Map.of("providerPaymentId", "provider-1"))
-                        .withVariable("manualReview", true),
-                state -> state.transition("sent", "DECIDE", ctx -> ctx.resultCodeEquals("OK")))
+                state ->
+                    state
+                        .action(
+                            ctx ->
+                                StepResult.success("OK", Map.of("providerPaymentId", "provider-1"))
+                                    .withVariable("manualReview", true))
+                        .transition(
+                            transition ->
+                                transition
+                                    .name("sent")
+                                    .targetState("DECIDE")
+                                    .condition(ctx -> ctx.resultCodeEquals("OK"))))
             .decisionState(
                 "DECIDE",
                 state ->
                     state
                         .transition(
-                            "manual-review",
-                            "REVIEW",
-                            ctx ->
-                                Boolean.TRUE.equals(
-                                        ctx.variables().get("manualReview").orElse(false))
-                                    && ctx.variables()
-                                        .string("providerPaymentId")
-                                        .orElse("")
-                                        .equals("provider-1"))
+                            transition ->
+                                transition
+                                    .name("manual-review")
+                                    .targetState("REVIEW")
+                                    .condition(
+                                        ctx ->
+                                            Boolean.TRUE.equals(
+                                                    ctx.variables()
+                                                        .get("manualReview")
+                                                        .orElse(false))
+                                                && ctx.variables()
+                                                    .string("providerPaymentId")
+                                                    .orElse("")
+                                                    .equals("provider-1")))
                         .otherwise("DONE"))
             .terminalState("REVIEW", ProcessInstanceStatus.COMPLETED)
             .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
@@ -322,11 +359,17 @@ class PostgresProcessManagerTest {
             .initialState("SEND")
             .actionState(
                 "SEND",
-                ctx -> {
-                  actionExecuted.set(true);
-                  return StepResult.success("OK");
-                },
-                state -> state.timeout(Duration.ofMinutes(5), "FAILED").otherwise("DONE"))
+                state ->
+                    state
+                        .action(
+                            ctx -> {
+                              actionExecuted.set(true);
+                              return StepResult.success("OK");
+                            })
+                        .timeout(
+                            timeout ->
+                                timeout.duration(Duration.ofMinutes(5)).targetState("FAILED"))
+                        .otherwise("DONE"))
             .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
             .terminalState("FAILED", ProcessInstanceStatus.FAILED)
             .build();
@@ -386,13 +429,16 @@ class PostgresProcessManagerTest {
             .version(1)
             .payloadSchemaVersion(1)
             .initialState("WAIT_RESULT")
-            .processTimeout(Duration.ofMinutes(30), "FAILED")
+            .processTimeout(
+                timeout -> timeout.duration(Duration.ofMinutes(30)).targetState("FAILED"))
             .waitState(
                 "WAIT_RESULT",
-                "payment.result",
-                ctx -> ctx.payload().paymentId(),
-                Duration.ofMinutes(5),
-                state -> state.otherwise("DONE"))
+                state ->
+                    state
+                        .eventType("payment.result")
+                        .correlationKey(ctx -> ctx.payload().paymentId())
+                        .waitTimeout(Duration.ofMinutes(5))
+                        .otherwise("DONE"))
             .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
             .terminalState("FAILED", ProcessInstanceStatus.FAILED)
             .build();
@@ -454,9 +500,11 @@ class PostgresProcessManagerTest {
             .initialState("SEND")
             .actionState(
                 "SEND",
-                ctx -> StepResult.retryableFailure("TEMPORARY_ERROR", "temporary outage"),
                 state ->
                     state
+                        .action(
+                            ctx ->
+                                StepResult.retryableFailure("TEMPORARY_ERROR", "temporary outage"))
                         .retry(RetryPolicy.exponential(2, retryDelay, Duration.ofSeconds(10)))
                         .otherwise("FAILED"))
             .terminalState("FAILED", ProcessInstanceStatus.FAILED)

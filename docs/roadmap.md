@@ -31,6 +31,8 @@
   - execute `ACTION`;
   - persist action result data and explicit variable updates;
   - persist last trigger data for action/event/timeout/retry;
+  - track process/state deadlines;
+  - schedule timeout commands from deadline watchdog only after deadline expiration;
   - register `WAIT`;
   - evaluate `DECISION`;
   - enter terminal state;
@@ -39,10 +41,9 @@
 
 ## Ближайший MVP
 
-1. Довести retry и timeout execution:
+1. Довести retry execution:
    - formalize retry counters/metadata;
    - route exhausted retry outcomes;
-   - choose timeout transition explicitly;
    - add metrics for skipped stale commands.
 
 2. Довести payload mapper:
@@ -54,10 +55,10 @@
    - безопасно пропускать устаревшие retry/timeout/resume commands;
    - добавить метрики.
 
-4. Реализовать wait timeout:
-   - сохранять `expires_at`;
-   - планировать `TIMEOUT` command;
-   - выбирать timeout transition.
+4. Довести deadline watchdog:
+   - добавить метрики по просроченным process/state deadlines;
+   - добавить рекомендуемую scheduled-конфигурацию;
+   - определить политику escalation для процессов без timeout target.
 
 ## Следующие этапы
 

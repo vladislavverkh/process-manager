@@ -19,4 +19,6 @@ public class ProcessManagerProperties {
   @NotBlank private String taskType = "process-manager.command";
 
   @Positive private int cleanupBatchSize = 100;
+
+  @Positive private int deadlineBatchSize = 100;
 }

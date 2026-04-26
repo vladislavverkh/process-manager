@@ -39,6 +39,10 @@ ProcessCommandScheduler
   | task type: process-manager.command
   v
 task-queue-postgres
+
+ProcessDeadlineWatchdog periodically scans `pm_process_instance` for expired
+`process_deadline_at`/`state_deadline_at` rows and schedules timeout commands only for rows that are
+already overdue.
 ```
 
 ## Runtime flow
@@ -65,12 +69,13 @@ state transitions from the stored instance state.
 
 1. `ProcessCommandTaskHandler` receives `process-manager.command` from task queue.
 2. It deserializes `ProcessCommand`.
-3. It calls `ProcessManager.resume(instanceId)`.
+3. It calls `ProcessManager.resume(command)`.
 4. Runtime locks the instance, checks command version, evaluates current state and executes the next
    transition.
 
 Current implementation handles ACTION, WAIT, DECISION and TERMINAL states in the PostgreSQL-backed
-runtime. Retry and timeout routing are intentionally still limited and tracked in the roadmap.
+runtime. Retry routing exists for retryable failures; timeout routing is driven by stored deadlines
+and `ProcessDeadlineWatchdog`.
 
 ## Почему task-queue-postgres не хранит process payload
 
@@ -102,5 +107,5 @@ Queue payload должен быть маленьким и техническим
 - durable delivery команд исполнения;
 - partition ordering по business key;
 - lease/ownership worker'ов;
-- delayed retry/resume commands;
+- delayed retry commands и обычные resume/timeout commands;
 - backpressure на уровне очереди.

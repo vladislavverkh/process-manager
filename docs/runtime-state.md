@@ -19,6 +19,9 @@ payload_json
 variables_json
 started_at
 updated_at
+process_deadline_at
+state_entered_at
+state_deadline_at
 completed_at
 delete_after
 version
@@ -62,7 +65,7 @@ Runtime обновляет variables после исполнения steps:
 - `_pm.lastEvent` хранит последнее внешнее событие, которое возобновило WAIT;
 - `_pm.lastRetry` хранит metadata последнего запланированного retry;
 - `_pm.lastTrigger` хранит последнюю причину продолжения процесса: `ACTION_RESULT`, `EVENT`,
-  `TIMEOUT`, `RETRY` или `START`.
+  `PROCESS_TIMEOUT`, `STATE_TIMEOUT`, `RETRY` или `START`.
 
 Служебный префикс `_pm.` зарезервирован runtime'ом. Пользовательские variables не должны
 использовать этот namespace.
@@ -107,6 +110,25 @@ expires_at
 
 Когда приходит `signal(eventType, correlationKey, payload)`, runtime ищет wait points и планирует
 resume для найденных instances.
+
+## Deadlines
+
+Runtime хранит дедлайны в `pm_process_instance`:
+
+- `process_deadline_at` - общий дедлайн процесса, считается от `started_at`;
+- `state_entered_at` - момент входа в текущее state;
+- `state_deadline_at` - дедлайн текущего state, если он задан.
+
+WAIT timeout также попадает в `state_deadline_at`. Это значит, что для 10 000 процессов из 10 шагов
+не создаются 100 000 отложенных timeout-команд. Отдельный watchdog периодически выбирает только уже
+истекшие дедлайны через `for update skip locked` и планирует `PROCESS_TIMEOUT` или `STATE_TIMEOUT`
+command с текущей `version`.
+
+Если процесс успел перейти дальше или завершиться, command становится stale и не меняет состояние.
+
+Дедлайн не прерывает уже выполняющийся Java `ACTION` внутри потока. Внешние вызовы внутри action
+должны иметь собственные client timeouts; отдельный шаг по выносу action execution из транзакции или
+в worker lease нужен, если потребуется принудительно обнаруживать именно зависший поток исполнения.
 
 ## Event inbox
 

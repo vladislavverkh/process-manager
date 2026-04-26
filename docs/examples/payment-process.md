@@ -1,7 +1,6 @@
 # Пример платежного процесса
 
-Этот пример показывает целевой стиль описания сценария. Он опирается на текущую core-модель, но
-полное исполнение `ACTION/WAIT/DECISION` будет реализовано в следующих этапах runtime.
+Этот пример показывает текущий стиль описания сценария в Java DSL.
 
 ## Сценарий
 
@@ -56,6 +55,7 @@ ProcessDefinition<PaymentPayload> paymentProcess(PaymentActions actions) {
       .version(1)
       .payloadSchemaVersion(1)
       .initialState("SEND_PAYMENT")
+      .processTimeout(Duration.ofHours(2), "TECHNICAL_FAILURE")
       .retention(
           new ProcessRetention(
               Duration.ofDays(30),
@@ -80,6 +80,7 @@ ProcessDefinition<PaymentPayload> paymentProcess(PaymentActions actions) {
               state
                   .transition("approved", "DONE", ctx -> ctx.eventFieldEquals("status", "APPROVED"))
                   .transition("declined", "FAILED", ctx -> ctx.eventFieldEquals("status", "DECLINED"))
+                  .timeoutTransition("TECHNICAL_FAILURE")
                   .otherwise("TECHNICAL_FAILURE"))
       .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
       .terminalState("FAILED", ProcessInstanceStatus.FAILED)
@@ -113,4 +114,3 @@ processManager.signal(
 
 После signal runtime сохраняет событие в inbox, находит wait point по
 `event_type + correlation_key` и ставит resume command в task queue.
-

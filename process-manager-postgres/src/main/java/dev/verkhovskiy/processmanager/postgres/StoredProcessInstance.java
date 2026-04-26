@@ -17,6 +17,9 @@ public record StoredProcessInstance(
     String variablesJson,
     Instant startedAt,
     Instant updatedAt,
+    Instant processDeadlineAt,
+    Instant stateEnteredAt,
+    Instant stateDeadlineAt,
     Instant completedAt,
     Instant deleteAfter,
     long version) {}

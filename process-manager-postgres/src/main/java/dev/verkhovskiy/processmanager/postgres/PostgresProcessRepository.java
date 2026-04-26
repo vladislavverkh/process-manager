@@ -34,6 +34,9 @@ public class PostgresProcessRepository {
               rs.getString("variables_json"),
               toInstant(rs, "started_at"),
               toInstant(rs, "updated_at"),
+              toInstant(rs, "process_deadline_at"),
+              toInstant(rs, "state_entered_at"),
+              toInstant(rs, "state_deadline_at"),
               toInstant(rs, "completed_at"),
               toInstant(rs, "delete_after"),
               rs.getLong("version"));
@@ -82,6 +85,9 @@ public class PostgresProcessRepository {
                 variables_json,
                 started_at,
                 updated_at,
+                process_deadline_at,
+                state_entered_at,
+                state_deadline_at,
                 completed_at,
                 delete_after,
                 version
@@ -98,6 +104,9 @@ public class PostgresProcessRepository {
                 cast(:variablesJson as jsonb),
                 :startedAt,
                 :updatedAt,
+                :processDeadlineAt,
+                :stateEnteredAt,
+                :stateDeadlineAt,
                 :completedAt,
                 :deleteAfter,
                 :version
@@ -122,6 +131,9 @@ public class PostgresProcessRepository {
                    variables_json::text as variables_json,
                    started_at,
                    updated_at,
+                   process_deadline_at,
+                   state_entered_at,
+                   state_deadline_at,
                    completed_at,
                    delete_after,
                    version
@@ -141,6 +153,8 @@ public class PostgresProcessRepository {
       String state,
       ProcessInstanceStatus status,
       String variablesJson,
+      Instant stateEnteredAt,
+      Instant stateDeadlineAt,
       Instant completedAt,
       Instant deleteAfter) {
     return jdbc.update(
@@ -153,6 +167,8 @@ public class PostgresProcessRepository {
                    status = :status,
                    variables_json = cast(:variablesJson as jsonb),
                    updated_at = runtime_clock.now,
+                   state_entered_at = :stateEnteredAt,
+                   state_deadline_at = :stateDeadlineAt,
                    completed_at = :completedAt,
                    delete_after = :deleteAfter,
                    version = version + 1
@@ -166,8 +182,53 @@ public class PostgresProcessRepository {
             .addValue("state", state)
             .addValue("status", status.name())
             .addValue("variablesJson", variablesJson)
+            .addValue("stateEnteredAt", toOffsetDateTime(stateEnteredAt))
+            .addValue("stateDeadlineAt", toOffsetDateTime(stateDeadlineAt))
             .addValue("completedAt", toOffsetDateTime(completedAt))
             .addValue("deleteAfter", toOffsetDateTime(deleteAfter)));
+  }
+
+  /** Находит и блокирует экземпляры процессов с истекшими process/state deadlines. */
+  public List<StoredProcessInstance> findExpiredDeadlinesForUpdate(int limit) {
+    return jdbc.query(
+        """
+            with runtime_clock as (
+                select clock_timestamp() as now
+            )
+            select instance_id,
+                   process_type,
+                   definition_version,
+                   payload_schema_version,
+                   business_key,
+                   state,
+                   status,
+                   payload_json::text as payload_json,
+                   variables_json::text as variables_json,
+                   started_at,
+                   updated_at,
+                   process_deadline_at,
+                   state_entered_at,
+                   state_deadline_at,
+                   completed_at,
+                   delete_after,
+                   version
+              from pm_process_instance
+             cross join runtime_clock
+             where status in ('RUNNING', 'WAITING')
+               and (
+                    (process_deadline_at is not null and process_deadline_at <= runtime_clock.now)
+                 or (state_deadline_at is not null and state_deadline_at <= runtime_clock.now)
+               )
+             order by least(
+                    coalesce(process_deadline_at, 'infinity'::timestamptz),
+                    coalesce(state_deadline_at, 'infinity'::timestamptz)
+                  ),
+                  instance_id
+             for update of pm_process_instance skip locked
+             limit :limit
+            """,
+        new MapSqlParameterSource("limit", limit),
+        INSTANCE_MAPPER);
   }
 
   /** Регистрирует или заменяет точку ожидания внешнего события. */
@@ -390,6 +451,9 @@ public class PostgresProcessRepository {
         .addValue("variablesJson", instance.variablesJson())
         .addValue("startedAt", toOffsetDateTime(instance.startedAt()))
         .addValue("updatedAt", toOffsetDateTime(instance.updatedAt()))
+        .addValue("processDeadlineAt", toOffsetDateTime(instance.processDeadlineAt()))
+        .addValue("stateEnteredAt", toOffsetDateTime(instance.stateEnteredAt()))
+        .addValue("stateDeadlineAt", toOffsetDateTime(instance.stateDeadlineAt()))
         .addValue("completedAt", toOffsetDateTime(instance.completedAt()))
         .addValue("deleteAfter", toOffsetDateTime(instance.deleteAfter()))
         .addValue("version", instance.version());

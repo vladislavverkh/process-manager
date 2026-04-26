@@ -24,6 +24,7 @@ ProcessManagerAutoConfiguration
 | `PostgresProcessRepository` | Есть `NamedParameterJdbcTemplate` |
 | `ProcessCommandScheduler` | Есть `TaskProducer` |
 | `ProcessManager` | Есть registry, repository, scheduler и `ObjectMapper` |
+| `ProcessDeadlineWatchdog` | Есть repository и scheduler |
 | `ProcessCommandTaskHandler` | Есть `ProcessManager` |
 
 ## Свойства
@@ -39,6 +40,7 @@ process.manager
 | `process.manager.enabled` | `true` | Включает/отключает autoconfiguration |
 | `process.manager.task-type` | `process-manager.command` | Зарезервировано под настройку task type |
 | `process.manager.cleanup-batch-size` | `100` | Batch size будущего retention cleanup |
+| `process.manager.deadline-batch-size` | `100` | Batch size одного прохода deadline watchdog |
 
 Важно: `task-type` уже есть в properties, но текущий `TaskQueueProcessCommandScheduler` пока использует
 константу `process-manager.command`. Настройку task type нужно подключить в следующем этапе.
@@ -70,6 +72,18 @@ class PaymentProcessConfiguration {
 `ProcessDefinitionRegistry` принимает `List<ProcessDefinition<?>>` и индексирует definitions по
 `processType + version`.
 
+## Deadline watchdog
+
+Starter создает bean `ProcessDeadlineWatchdog`. Приложение само задает расписание его запуска,
+например через Spring Scheduling:
+
+```java
+@Scheduled(fixedDelayString = "PT10S")
+void processDeadlines() {
+  processDeadlineWatchdog.runOnce();
+}
+```
+
 ## Интеграция с task-queue-postgres
 
 Приложение должно подключить `task-queue-postgres` starter и настроить его инфраструктуру. Тогда
@@ -83,4 +97,3 @@ implementation("dev.verkhovskiy:process-manager-spring-boot-starter")
 ```
 
 Для local development этот проект использует composite build на `../task-queue-postgres`.
-

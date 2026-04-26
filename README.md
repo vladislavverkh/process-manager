@@ -21,7 +21,9 @@
   commands;
 - есть сохранение action result data, explicit variable updates и last trigger data в
   `variables_json`;
-- payload validation, полноценная retry-модель и timeout transition handling еще развиваются.
+- есть process/state deadlines и watchdog, который планирует timeout-команды только после
+  фактического истечения дедлайна;
+- payload validation и полноценная retry-модель еще развиваются.
 
 ## Документация
 

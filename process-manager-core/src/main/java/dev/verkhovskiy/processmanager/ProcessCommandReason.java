@@ -5,5 +5,7 @@ public enum ProcessCommandReason {
   START,
   RESUME,
   RETRY,
-  TIMEOUT
+  TIMEOUT,
+  PROCESS_TIMEOUT,
+  STATE_TIMEOUT
 }

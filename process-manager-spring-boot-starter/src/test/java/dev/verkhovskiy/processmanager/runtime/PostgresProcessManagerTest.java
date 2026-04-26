@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.notNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -31,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -85,6 +88,8 @@ class PostgresProcessManagerTest {
             eq(ProcessInstanceStatus.COMPLETED),
             any(),
             any(),
+            isNull(),
+            any(),
             any()))
         .thenReturn(1);
 
@@ -106,6 +111,8 @@ class PostgresProcessManagerTest {
             eq(ProcessInstanceStatus.COMPLETED),
             variablesCaptor.capture(),
             any(),
+            isNull(),
+            any(),
             any());
     Map<String, Object> variables = jsonMap(variablesCaptor.getValue());
     assertThat(variables)
@@ -118,7 +125,7 @@ class PostgresProcessManagerTest {
   }
 
   @Test
-  void enteringWaitStateRegistersWaitAndSchedulesTimeout() {
+  void enteringWaitStateRegistersWaitAndStoresDeadline() {
     Duration timeout = Duration.ofMinutes(5);
     ProcessDefinition<PaymentPayload> definition =
         ProcessDefinition.builder("payment", PaymentPayload.class)
@@ -150,8 +157,10 @@ class PostgresProcessManagerTest {
             eq("WAIT_RESULT"),
             eq(ProcessInstanceStatus.WAITING),
             any(),
-            eq(null),
-            eq(null)))
+            any(),
+            notNull(),
+            isNull(),
+            isNull()))
         .thenReturn(1);
 
     manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.START, 0));
@@ -162,11 +171,7 @@ class PostgresProcessManagerTest {
     assertThat(wait.state()).isEqualTo("WAIT_RESULT");
     assertThat(wait.eventType()).isEqualTo("payment.result");
     assertThat(wait.correlationKey()).isEqualTo("pay-1");
-    verify(commandScheduler)
-        .scheduleDelayed(
-            new ProcessCommand(INSTANCE_ID, ProcessCommandReason.TIMEOUT, 1),
-            "payment:payment-1",
-            timeout);
+    verify(commandScheduler, never()).scheduleDelayed(any(), any(), any());
   }
 
   @Test
@@ -206,6 +211,8 @@ class PostgresProcessManagerTest {
             eq(ProcessInstanceStatus.COMPLETED),
             any(),
             any(),
+            isNull(),
+            any(),
             any()))
         .thenReturn(1);
 
@@ -227,6 +234,8 @@ class PostgresProcessManagerTest {
             eq("DONE"),
             eq(ProcessInstanceStatus.COMPLETED),
             variablesCaptor.capture(),
+            any(),
+            isNull(),
             any(),
             any());
     Map<String, Object> variables = jsonMap(variablesCaptor.getValue());
@@ -270,7 +279,7 @@ class PostgresProcessManagerTest {
     when(processRepository.findInstanceForUpdate(INSTANCE_ID))
         .thenReturn(Optional.of(instance("SEND", ProcessInstanceStatus.RUNNING, 0)));
     when(processRepository.updateExecutionState(
-            eq(INSTANCE_ID), anyLong(), any(), any(), any(), any(), any()))
+            eq(INSTANCE_ID), anyLong(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(1);
 
     manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.START, 0));
@@ -283,6 +292,8 @@ class PostgresProcessManagerTest {
             eq(ProcessInstanceStatus.RUNNING),
             variablesCaptor.capture(),
             any(),
+            isNull(),
+            isNull(),
             any());
     verify(processRepository)
         .updateExecutionState(
@@ -292,11 +303,145 @@ class PostgresProcessManagerTest {
             eq(ProcessInstanceStatus.COMPLETED),
             variablesCaptor.capture(),
             any(),
+            isNull(),
+            any(),
             any());
     Map<String, Object> variables = jsonMap(variablesCaptor.getAllValues().getLast());
     assertThat(variables)
         .containsEntry("providerPaymentId", "provider-1")
         .containsEntry("manualReview", true);
+  }
+
+  @Test
+  void stateTimeoutTransitionsToConfiguredStateWithoutExecutingAction() throws Exception {
+    AtomicBoolean actionExecuted = new AtomicBoolean(false);
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .version(1)
+            .payloadSchemaVersion(1)
+            .initialState("SEND")
+            .actionState(
+                "SEND",
+                ctx -> {
+                  actionExecuted.set(true);
+                  return StepResult.success("OK");
+                },
+                state -> state.timeout(Duration.ofMinutes(5), "FAILED").otherwise("DONE"))
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .terminalState("FAILED", ProcessInstanceStatus.FAILED)
+            .build();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(
+            Optional.of(
+                instance(
+                    "SEND",
+                    ProcessInstanceStatus.RUNNING,
+                    2,
+                    null,
+                    Instant.parse("2026-04-26T10:00:00Z"),
+                    Instant.EPOCH)));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(2L),
+            eq("FAILED"),
+            eq(ProcessInstanceStatus.FAILED),
+            any(),
+            any(),
+            isNull(),
+            any(),
+            any()))
+        .thenReturn(1);
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.STATE_TIMEOUT, 2));
+
+    assertThat(actionExecuted).isFalse();
+    verify(processRepository).insertHistory(historyCaptor.capture());
+    ProcessHistoryRecord history = historyCaptor.getValue();
+    assertThat(history.fromState()).isEqualTo("SEND");
+    assertThat(history.toState()).isEqualTo("FAILED");
+    assertThat(history.transitionName()).isEqualTo("state-timeout");
+    assertThat(history.triggerType()).isEqualTo("STATE_TIMEOUT");
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(2L),
+            eq("FAILED"),
+            eq(ProcessInstanceStatus.FAILED),
+            variablesCaptor.capture(),
+            any(),
+            isNull(),
+            any(),
+            any());
+    assertThat(nested(jsonMap(variablesCaptor.getValue()), "_pm.lastTrigger"))
+        .containsEntry("type", "STATE_TIMEOUT")
+        .containsEntry("state", "SEND")
+        .containsEntry("targetState", "FAILED");
+  }
+
+  @Test
+  void processTimeoutTransitionsToConfiguredState() throws Exception {
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .version(1)
+            .payloadSchemaVersion(1)
+            .initialState("WAIT_RESULT")
+            .processTimeout(Duration.ofMinutes(30), "FAILED")
+            .waitState(
+                "WAIT_RESULT",
+                "payment.result",
+                ctx -> ctx.payload().paymentId(),
+                Duration.ofMinutes(5),
+                state -> state.otherwise("DONE"))
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .terminalState("FAILED", ProcessInstanceStatus.FAILED)
+            .build();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(
+            Optional.of(
+                instance(
+                    "WAIT_RESULT",
+                    ProcessInstanceStatus.WAITING,
+                    4,
+                    Instant.EPOCH,
+                    Instant.parse("2026-04-26T10:00:00Z"),
+                    Instant.parse("2026-04-26T10:05:00Z"))));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(4L),
+            eq("FAILED"),
+            eq(ProcessInstanceStatus.FAILED),
+            any(),
+            any(),
+            isNull(),
+            any(),
+            any()))
+        .thenReturn(1);
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.PROCESS_TIMEOUT, 4));
+
+    verify(processRepository).deleteWaits(INSTANCE_ID);
+    verify(processRepository).insertHistory(historyCaptor.capture());
+    ProcessHistoryRecord history = historyCaptor.getValue();
+    assertThat(history.fromState()).isEqualTo("WAIT_RESULT");
+    assertThat(history.toState()).isEqualTo("FAILED");
+    assertThat(history.transitionName()).isEqualTo("process-timeout");
+    assertThat(history.triggerType()).isEqualTo("PROCESS_TIMEOUT");
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(4L),
+            eq("FAILED"),
+            eq(ProcessInstanceStatus.FAILED),
+            variablesCaptor.capture(),
+            any(),
+            isNull(),
+            any(),
+            any());
+    assertThat(nested(jsonMap(variablesCaptor.getValue()), "_pm.lastTrigger"))
+        .containsEntry("type", "PROCESS_TIMEOUT")
+        .containsEntry("targetState", "FAILED");
   }
 
   @Test
@@ -325,8 +470,10 @@ class PostgresProcessManagerTest {
             eq("SEND"),
             eq(ProcessInstanceStatus.RUNNING),
             any(),
-            eq(null),
-            eq(null)))
+            any(),
+            isNull(),
+            isNull(),
+            isNull()))
         .thenReturn(1);
 
     manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.START, 0));
@@ -343,8 +490,10 @@ class PostgresProcessManagerTest {
             eq("SEND"),
             eq(ProcessInstanceStatus.RUNNING),
             variablesCaptor.capture(),
-            eq(null),
-            eq(null));
+            any(),
+            isNull(),
+            isNull(),
+            isNull());
     Map<String, Object> variables = jsonMap(variablesCaptor.getValue());
     assertThat(nested(variables, "_pm.lastTrigger")).containsEntry("type", "RETRY");
     assertThat(nested(variables, "_pm.lastRetry"))
@@ -371,7 +520,7 @@ class PostgresProcessManagerTest {
     manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RESUME, 3));
 
     verify(processRepository, never())
-        .updateExecutionState(any(), anyLong(), any(), any(), any(), any(), any());
+        .updateExecutionState(any(), anyLong(), any(), any(), any(), any(), any(), any(), any());
     verifyNoInteractions(commandScheduler);
   }
 
@@ -385,6 +534,16 @@ class PostgresProcessManagerTest {
 
   private static StoredProcessInstance instance(
       String state, ProcessInstanceStatus status, long version) {
+    return instance(state, status, version, null, Instant.parse("2026-04-26T10:00:00Z"), null);
+  }
+
+  private static StoredProcessInstance instance(
+      String state,
+      ProcessInstanceStatus status,
+      long version,
+      Instant processDeadlineAt,
+      Instant stateEnteredAt,
+      Instant stateDeadlineAt) {
     return new StoredProcessInstance(
         INSTANCE_ID,
         "payment",
@@ -397,6 +556,9 @@ class PostgresProcessManagerTest {
         "{}",
         Instant.parse("2026-04-26T10:00:00Z"),
         Instant.parse("2026-04-26T10:00:00Z"),
+        processDeadlineAt,
+        stateEnteredAt,
+        stateDeadlineAt,
         null,
         null,
         version);

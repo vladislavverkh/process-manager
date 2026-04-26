@@ -25,6 +25,9 @@ process-manager-postgres/src/main/resources/db/migration/V1__process_manager.sql
 | `variables_json` | Runtime variables |
 | `started_at` | Время старта |
 | `updated_at` | Последнее обновление |
+| `process_deadline_at` | Общий дедлайн процесса |
+| `state_entered_at` | Время входа в текущее state |
+| `state_deadline_at` | Дедлайн текущего state или WAIT |
 | `completed_at` | Время входа в terminal status |
 | `delete_after` | Момент, после которого instance можно удалить |
 | `version` | Optimistic version |
@@ -34,6 +37,8 @@ process-manager-postgres/src/main/resources/db/migration/V1__process_manager.sql
 - unique `(process_type, business_key)` для non-terminal instances;
 - `(status, delete_after)` для cleanup;
 - `(process_type, state, status)` для диагностики и будущего admin API.
+- `(process_deadline_at, instance_id)` для watchdog общего дедлайна;
+- `(state_deadline_at, instance_id)` для watchdog state/WAIT дедлайна.
 
 ### pm_process_wait
 
@@ -95,6 +100,7 @@ process-manager-postgres/src/main/resources/db/migration/V1__process_manager.sql
 Это важно для:
 
 - timeout wait points;
+- process/state deadline watchdog;
 - retention cleanup;
 - delayed commands;
 - корректной работы при clock skew между приложениями.
@@ -108,4 +114,3 @@ process-manager-postgres/src/main/resources/db/migration/V1__process_manager.sql
 - `event_type`;
 - `correlation_key`;
 - будущие materialized search keys, если появится operator UI.
-

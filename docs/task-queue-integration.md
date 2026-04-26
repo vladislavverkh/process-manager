@@ -41,7 +41,9 @@ Queue payload содержит только technical command:
 | `START` | Первое исполнение после создания instance |
 | `RESUME` | Возобновление после external event |
 | `RETRY` | Повтор action после retryable failure |
-| `TIMEOUT` | Продолжение после истечения wait timeout |
+| `PROCESS_TIMEOUT` | Продолжение после истечения общего дедлайна процесса |
+| `STATE_TIMEOUT` | Продолжение после истечения дедлайна текущего state или WAIT |
+| `TIMEOUT` | Legacy alias для `STATE_TIMEOUT` |
 
 ## Partition key
 
@@ -72,6 +74,21 @@ ProcessCommandScheduler.scheduleDelayed(command, partitionKey, delay)
 
 Task queue считает delay от времени PostgreSQL через `enqueueDelayed`, что защищает от JVM clock skew.
 
+## Timeout watchdog
+
+Timeout-команды не планируются заранее для каждого state. Runtime сохраняет `process_deadline_at` и
+`state_deadline_at` в `pm_process_instance`, а `ProcessDeadlineWatchdog` сканирует уже истекшие
+дедлайны батчем и ставит в очередь только фактически нужные команды.
+
+Типичный запуск в приложении:
+
+```java
+@Scheduled(fixedDelayString = "PT10S")
+void processDeadlines() {
+  processDeadlineWatchdog.runOnce();
+}
+```
+
 ## Stale commands
 
 `expectedVersion` должен использоваться execution loop:
@@ -93,4 +110,3 @@ Task queue не должен:
 - быть источником истины по статусу процесса.
 
 Все это остается в process-manager runtime и PostgreSQL state.
-

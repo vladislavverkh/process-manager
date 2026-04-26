@@ -1,5 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -11,6 +12,8 @@ public record ProcessDefinition<P>(
     Class<P> payloadType,
     String initialState,
     ProcessRetention retention,
+    Duration processTimeout,
+    String processTimeoutTargetState,
     Map<String, StateDefinition<P>> states) {
 
   public ProcessDefinition {
@@ -30,8 +33,18 @@ public record ProcessDefinition<P>(
       throw new IllegalArgumentException("initialState must be set");
     }
     retention = retention == null ? ProcessRetention.defaults() : retention;
+    if (processTimeout != null && (processTimeout.isZero() || processTimeout.isNegative())) {
+      throw new IllegalArgumentException("processTimeout must be positive");
+    }
+    if (processTimeout != null
+        && (processTimeoutTargetState == null || processTimeoutTargetState.isBlank())) {
+      throw new IllegalArgumentException("processTimeoutTargetState must be set");
+    }
+    if (processTimeout == null && processTimeoutTargetState != null) {
+      throw new IllegalArgumentException("processTimeout must be set");
+    }
     states = Map.copyOf(states == null ? Map.of() : states);
-    validate(initialState, states);
+    validate(initialState, processTimeoutTargetState, states);
   }
 
   /** Создает типизированный построитель описания процесса. */
@@ -49,26 +62,41 @@ public record ProcessDefinition<P>(
   }
 
   private static void validate(
-      String initialState, Map<String, ? extends StateDefinition<?>> states) {
+      String initialState,
+      String processTimeoutTargetState,
+      Map<String, ? extends StateDefinition<?>> states) {
     if (!states.containsKey(initialState)) {
       throw new ProcessDefinitionException("Initial state does not exist: " + initialState);
     }
-    states.forEach(
-        (stateName, state) ->
-            state
-                .transitions()
-                .forEach(
-                    transition -> {
-                      if (!states.containsKey(transition.targetState())) {
-                        throw new ProcessDefinitionException(
-                            "Transition "
-                                + transition.name()
-                                + " from "
-                                + stateName
-                                + " points to unknown state "
-                                + transition.targetState());
-                      }
-                    }));
+    if (processTimeoutTargetState != null && !states.containsKey(processTimeoutTargetState)) {
+      throw new ProcessDefinitionException(
+          "Process timeout points to unknown state " + processTimeoutTargetState);
+    }
+    states.forEach((stateName, state) -> validateStateTransitions(stateName, state, states));
+  }
+
+  private static void validateStateTransitions(
+      String stateName,
+      StateDefinition<?> state,
+      Map<String, ? extends StateDefinition<?>> states) {
+    if (state.timeoutTargetState() != null && !states.containsKey(state.timeoutTargetState())) {
+      throw new ProcessDefinitionException(
+          "Timeout from " + stateName + " points to unknown state " + state.timeoutTargetState());
+    }
+    state
+        .transitions()
+        .forEach(
+            transition -> {
+              if (!states.containsKey(transition.targetState())) {
+                throw new ProcessDefinitionException(
+                    "Transition "
+                        + transition.name()
+                        + " from "
+                        + stateName
+                        + " points to unknown state "
+                        + transition.targetState());
+              }
+            });
   }
 
   static <P> Map<String, StateDefinition<P>> orderedCopy(Map<String, StateDefinition<P>> states) {

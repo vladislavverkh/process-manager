@@ -10,6 +10,9 @@ create table if not exists pm_process_instance (
     variables_json jsonb not null default '{}'::jsonb,
     started_at timestamptz not null,
     updated_at timestamptz not null,
+    process_deadline_at timestamptz,
+    state_entered_at timestamptz,
+    state_deadline_at timestamptz,
     completed_at timestamptz,
     delete_after timestamptz,
     version bigint not null default 0
@@ -25,6 +28,14 @@ create index if not exists pm_process_instance_cleanup_idx
 
 create index if not exists pm_process_instance_state_idx
     on pm_process_instance(process_type, state, status);
+
+create index if not exists pm_process_instance_process_deadline_idx
+    on pm_process_instance(process_deadline_at, instance_id)
+    where status in ('RUNNING', 'WAITING') and process_deadline_at is not null;
+
+create index if not exists pm_process_instance_state_deadline_idx
+    on pm_process_instance(state_deadline_at, instance_id)
+    where status in ('RUNNING', 'WAITING') and state_deadline_at is not null;
 
 create table if not exists pm_process_wait (
     wait_id uuid primary key,
@@ -69,4 +80,3 @@ create table if not exists pm_process_history (
 
 create index if not exists pm_process_history_instance_idx
     on pm_process_history(instance_id, created_at);
-

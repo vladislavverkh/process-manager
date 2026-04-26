@@ -17,6 +17,8 @@ public final class ProcessDefinitionBuilder<P> {
   private int payloadSchemaVersion = 1;
   private String initialState;
   private ProcessRetention retention = ProcessRetention.defaults();
+  private Duration processTimeout;
+  private String processTimeoutTargetState;
 
   ProcessDefinitionBuilder(String processType, Class<P> payloadType) {
     this.processType = processType;
@@ -40,6 +42,12 @@ public final class ProcessDefinitionBuilder<P> {
 
   public ProcessDefinitionBuilder<P> retention(ProcessRetention retention) {
     this.retention = retention;
+    return this;
+  }
+
+  public ProcessDefinitionBuilder<P> processTimeout(Duration timeout, String targetState) {
+    this.processTimeout = timeout;
+    this.processTimeoutTargetState = targetState;
     return this;
   }
 
@@ -89,6 +97,8 @@ public final class ProcessDefinitionBuilder<P> {
         payloadType,
         initialState,
         retention,
+        processTimeout,
+        processTimeoutTargetState,
         ProcessDefinition.orderedCopy(states));
   }
 
@@ -108,6 +118,8 @@ public final class ProcessDefinitionBuilder<P> {
     private String eventType;
     private CorrelationKeyResolver<P> correlationKeyResolver;
     private Duration waitTimeout;
+    private Duration stateTimeout;
+    private String timeoutTargetState;
     private RetryPolicy retryPolicy = RetryPolicy.none();
     private ProcessInstanceStatus terminalStatus;
 
@@ -118,6 +130,17 @@ public final class ProcessDefinitionBuilder<P> {
 
     public StateBuilder<P> retry(RetryPolicy retryPolicy) {
       this.retryPolicy = retryPolicy;
+      return this;
+    }
+
+    public StateBuilder<P> timeout(Duration timeout, String targetState) {
+      this.stateTimeout = timeout;
+      this.timeoutTargetState = targetState;
+      return this;
+    }
+
+    public StateBuilder<P> timeoutTransition(String targetState) {
+      this.timeoutTargetState = targetState;
       return this;
     }
 
@@ -171,6 +194,8 @@ public final class ProcessDefinitionBuilder<P> {
           eventType,
           correlationKeyResolver,
           waitTimeout,
+          stateTimeout,
+          timeoutTargetState,
           retryPolicy,
           terminalStatus,
           transitions);

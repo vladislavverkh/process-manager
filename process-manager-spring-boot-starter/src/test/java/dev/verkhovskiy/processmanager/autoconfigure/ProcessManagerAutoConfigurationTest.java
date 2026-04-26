@@ -8,6 +8,7 @@ import dev.verkhovskiy.processmanager.ProcessCommandScheduler;
 import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
 import dev.verkhovskiy.processmanager.ProcessManager;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
+import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
 import dev.verkhovskiy.processmanager.taskqueue.ProcessCommandTaskHandler;
 import dev.verkhovskiy.taskqueue.service.TaskProducer;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ class ProcessManagerAutoConfigurationTest {
           assertThat(context).hasSingleBean(PostgresProcessRepository.class);
           assertThat(context).hasSingleBean(ProcessCommandScheduler.class);
           assertThat(context).hasSingleBean(ProcessManager.class);
+          assertThat(context).hasSingleBean(ProcessDeadlineWatchdog.class);
           assertThat(context).hasSingleBean(ProcessCommandTaskHandler.class);
         });
   }

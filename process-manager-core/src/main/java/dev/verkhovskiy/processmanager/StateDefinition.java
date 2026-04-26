@@ -11,6 +11,8 @@ public record StateDefinition<P>(
     String eventType,
     CorrelationKeyResolver<P> correlationKeyResolver,
     Duration waitTimeout,
+    Duration stateTimeout,
+    String timeoutTargetState,
     RetryPolicy retryPolicy,
     ProcessInstanceStatus terminalStatus,
     List<TransitionDefinition<P>> transitions) {
@@ -21,6 +23,15 @@ public record StateDefinition<P>(
     }
     if (kind == null) {
       throw new IllegalArgumentException("state kind must be set");
+    }
+    if (stateTimeout != null && (stateTimeout.isZero() || stateTimeout.isNegative())) {
+      throw new IllegalArgumentException("stateTimeout must be positive");
+    }
+    if (timeoutTargetState != null && timeoutTargetState.isBlank()) {
+      throw new IllegalArgumentException("timeoutTargetState must not be blank");
+    }
+    if (timeoutTargetState != null && stateTimeout == null && waitTimeout == null) {
+      throw new IllegalArgumentException("timeoutTargetState requires stateTimeout or waitTimeout");
     }
     retryPolicy = retryPolicy == null ? RetryPolicy.none() : retryPolicy;
     transitions = List.copyOf(transitions == null ? List.of() : transitions);

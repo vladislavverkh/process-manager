@@ -23,6 +23,8 @@ class TransitionSelectorTest {
             null,
             null,
             null,
+            null,
+            null,
             RetryPolicy.none(),
             null,
             List.of(
@@ -45,6 +47,8 @@ class TransitionSelectorTest {
             null,
             null,
             null,
+            null,
+            null,
             RetryPolicy.none(),
             null,
             List.of(
@@ -62,6 +66,8 @@ class TransitionSelectorTest {
         new StateDefinition<>(
             "CHECK",
             StateKind.DECISION,
+            null,
+            null,
             null,
             null,
             null,

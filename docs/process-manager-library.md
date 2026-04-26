@@ -10,6 +10,7 @@
 - [PostgreSQL storage](postgres-storage.md)
 - [Интеграция с task-queue-postgres](task-queue-integration.md)
 - [Spring Boot starter](spring-boot.md)
+- [Operator REST API](operator-rest-api.md)
 - [Пример платежного процесса](examples/payment-process.md)
 - [Roadmap](roadmap.md)
 
@@ -32,6 +33,7 @@ ProcessDefinitionAssertions.assertThat(payment)
 - PostgreSQL-таблицы, индексы и retention cleanup: [postgres-storage.md](postgres-storage.md)
 - Как `task-queue-postgres` используется для retry/resume/timeout: [task-queue-integration.md](task-queue-integration.md)
 - Spring Boot autoconfiguration и свойства: [spring-boot.md](spring-boot.md)
+- REST endpoints для диагностики и ручных операций: [operator-rest-api.md](operator-rest-api.md)
 - Практический пример процесса платежа: [examples/payment-process.md](examples/payment-process.md)
 - Ближайшие этапы развития: [roadmap.md](roadmap.md)
 

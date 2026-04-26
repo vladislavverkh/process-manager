@@ -13,6 +13,7 @@
 | `process-manager-postgres` | Таблицы и repository для process instances, waits, event inbox и history |
 | `process-manager-task-queue` | Adapter, который ставит process commands в `task-queue-postgres` |
 | `process-manager-spring-boot-starter` | Autoconfiguration runtime-компонентов |
+| `process-manager-rest` | REST endpoints для диагностики и ручных операторских действий |
 | `process-manager-testkit` | Assertions/helpers для тестирования process definitions |
 
 ## Компоненты

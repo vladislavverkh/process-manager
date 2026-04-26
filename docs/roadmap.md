@@ -50,6 +50,10 @@
   - cancel active process instance;
   - schedule manual resume;
   - schedule manual retry for RUNNING instances.
+- Operator REST API:
+  - details and list endpoints for process instances;
+  - manual cancel/resume/retry endpoints;
+  - separate `process-manager-rest` module.
 - Process definition validation:
   - required ACTION/WAIT/TERMINAL fields;
   - duplicate transition priorities;
@@ -96,7 +100,6 @@
 ## Позже
 
 - Payload upcasters для schema evolution.
-- Operator REST API.
 - Partitioned history tables.
 - YAML/JSON process definitions, если Java DSL станет недостаточным.
 - Outbox для команд во внешние системы, если понадобится exactly-once интеграция.

@@ -28,6 +28,7 @@
   `signal`;
 - есть `ProcessInspector` для чтения instance, wait points и history без изменения процесса;
 - есть `ProcessOperator` для ручной отмены и ручного планирования resume/retry;
+- есть отдельный модуль `process-manager-rest` с Operator REST API;
 - payload validation и полноценная retry-модель еще развиваются.
 
 ## Документация
@@ -39,6 +40,7 @@
 - [PostgreSQL storage](docs/postgres-storage.md)
 - [Интеграция с task-queue-postgres](docs/task-queue-integration.md)
 - [Spring Boot starter](docs/spring-boot.md)
+- [Operator REST API](docs/operator-rest-api.md)
 - [Пример платежного процесса](docs/examples/payment-process.md)
 - [Roadmap](docs/roadmap.md)
 
@@ -48,6 +50,7 @@
 - `process-manager-postgres` - PostgreSQL-хранилище instance, wait, inbox и history.
 - `process-manager-task-queue` - adapter к `task-queue-postgres`.
 - `process-manager-spring-boot-starter` - Spring Boot autoconfiguration.
+- `process-manager-rest` - REST API для диагностики и ручных операторских действий.
 - `process-manager-testkit` - test helpers для process definitions.
 
 ## Локальная сборка

@@ -29,9 +29,7 @@ dependencyManagement {
 dependencies {
     api(project(":process-manager-core"))
     implementation(project(":process-manager-postgres"))
-    implementation(project(":process-manager-task-queue"))
 
-    implementation("dev.verkhovskiy:task-queue-core:0.0.1-SNAPSHOT")
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework:spring-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-databind")

@@ -11,7 +11,7 @@
 | --- | --- |
 | `process-manager-core` | Process definition, state model, conditional transitions, retry/retention contracts |
 | `process-manager-postgres` | Таблицы и repository для process instances, waits, event inbox и history |
-| `process-manager-task-queue` | Adapter, который ставит process commands в `task-queue-postgres` |
+| `process-manager-task-queue` | Опциональный adapter, который ставит process commands в `task-queue-postgres` |
 | `process-manager-spring-boot-starter` | Autoconfiguration runtime-компонентов |
 | `process-manager-rest` | REST endpoints для диагностики и ручных операторских действий |
 | `process-manager-testkit` | Assertions/helpers для тестирования process definitions |
@@ -37,9 +37,9 @@ PostgresProcessRepository
   v
 ProcessCommandScheduler
   |
-  | task type: process-manager.command
+  | durable command delivery
   v
-task-queue-postgres
+task-queue-postgres / another command executor
 
 ProcessDeadlineWatchdog periodically scans `pm_process_instance` for expired
 `process_deadline_at`/`state_deadline_at` rows and schedules timeout commands only for rows that are
@@ -73,9 +73,8 @@ idempotencyKey` не создает новую inbox-запись и не пла
 
 ### Resume
 
-1. `ProcessCommandTaskHandler` receives `process-manager.command` from task queue.
-2. It deserializes `ProcessCommand`.
-3. It calls `ProcessManager.resume(command)`.
+1. Command executor receives serialized or native `ProcessCommand`.
+2. It calls `ProcessManager.resume(command)`.
 4. Runtime locks the instance, checks command version, evaluates current state and executes the next
    transition.
 
@@ -108,10 +107,13 @@ Queue payload должен быть маленьким и техническим
 - retry/timeout;
 - историю и retention.
 
-`task-queue-postgres` отвечает за:
+Adapter к `task-queue-postgres` отвечает за:
 
 - durable delivery команд исполнения;
 - partition ordering по business key;
 - lease/ownership worker'ов;
 - delayed retry commands и обычные resume/timeout commands;
 - backpressure на уровне очереди.
+
+Другие реализации могут подключиться через свой `ProcessCommandScheduler` и свой command handler,
+который вызывает `ProcessManager.resume(command)`.

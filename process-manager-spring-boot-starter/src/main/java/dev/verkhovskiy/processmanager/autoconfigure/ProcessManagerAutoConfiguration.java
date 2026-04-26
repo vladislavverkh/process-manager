@@ -12,9 +12,6 @@ import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessManager;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessOperator;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
-import dev.verkhovskiy.processmanager.taskqueue.ProcessCommandTaskHandler;
-import dev.verkhovskiy.processmanager.taskqueue.TaskQueueProcessCommandScheduler;
-import dev.verkhovskiy.taskqueue.service.TaskProducer;
 import java.util.List;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -58,14 +55,6 @@ public class ProcessManagerAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  @ConditionalOnBean(TaskProducer.class)
-  ProcessCommandScheduler processCommandScheduler(
-      TaskProducer taskProducer, ObjectMapper objectMapper) {
-    return new TaskQueueProcessCommandScheduler(taskProducer, objectMapper);
-  }
-
-  @Bean
-  @ConditionalOnMissingBean
   @ConditionalOnBean({PostgresProcessRepository.class, ProcessCommandScheduler.class})
   ProcessManager processManager(
       ProcessDefinitionRegistry definitionRegistry,
@@ -97,13 +86,5 @@ public class ProcessManagerAutoConfiguration {
       ProcessManagerProperties properties) {
     return new ProcessDeadlineWatchdog(
         processRepository, commandScheduler, properties.getDeadlineBatchSize());
-  }
-
-  @Bean
-  @ConditionalOnMissingBean
-  @ConditionalOnBean(ProcessManager.class)
-  ProcessCommandTaskHandler processCommandTaskHandler(
-      ProcessManager processManager, ObjectMapper objectMapper) {
-    return new ProcessCommandTaskHandler(processManager, objectMapper);
   }
 }

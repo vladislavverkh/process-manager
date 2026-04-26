@@ -24,9 +24,10 @@ dependencies {
     api(project(":process-manager-core"))
 
     implementation("dev.verkhovskiy:task-queue-core:0.0.1-SNAPSHOT")
+    implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
-    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

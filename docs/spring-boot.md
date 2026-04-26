@@ -23,11 +23,12 @@ ProcessManagerAutoConfiguration
 | `ProcessDefinitionRegistry` | Всегда, если включен starter |
 | `PostgresProcessRepository` | Есть `NamedParameterJdbcTemplate` |
 | `ProcessInspector` | Есть `PostgresProcessRepository` и `ObjectMapper` |
-| `ProcessCommandScheduler` | Есть `TaskProducer` |
 | `ProcessManager` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessOperator` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessDeadlineWatchdog` | Есть repository и scheduler |
-| `ProcessCommandTaskHandler` | Есть `ProcessManager` |
+
+`ProcessCommandScheduler` должен быть предоставлен приложением или отдельным adapter-модулем.
+Базовый starter не зависит от конкретной очереди команд.
 
 ## Свойства
 
@@ -40,12 +41,8 @@ process.manager
 | Свойство | Default | Назначение |
 | --- | --- | --- |
 | `process.manager.enabled` | `true` | Включает/отключает autoconfiguration |
-| `process.manager.task-type` | `process-manager.command` | Зарезервировано под настройку task type |
 | `process.manager.cleanup-batch-size` | `100` | Batch size будущего retention cleanup |
 | `process.manager.deadline-batch-size` | `100` | Batch size одного прохода deadline watchdog |
-
-Важно: `task-type` уже есть в properties, но текущий `TaskQueueProcessCommandScheduler` пока использует
-константу `process-manager.command`. Настройку task type нужно подключить в следующем этапе.
 
 ## Регистрация process definitions
 
@@ -128,14 +125,16 @@ void processDeadlines() {
 
 ## Интеграция с task-queue-postgres
 
-Приложение должно подключить `task-queue-postgres` starter и настроить его инфраструктуру. Тогда
-`TaskProducer` будет доступен как bean, а process-manager сможет ставить process commands в очередь.
+Приложение может подключить `process-manager-task-queue` и `task-queue-postgres` starter. Тогда
+adapter создаст `ProcessCommandScheduler` и `ProcessCommandTaskHandler` поверх `TaskProducer`.
 
 Минимальный набор:
 
 ```kotlin
 implementation("dev.verkhovskiy:task-queue-spring-boot-starter")
 implementation("dev.verkhovskiy:process-manager-spring-boot-starter")
+implementation("dev.verkhovskiy:process-manager-task-queue")
 ```
 
-Для local development этот проект использует composite build на `../task-queue-postgres`.
+Если нужна другая очередь, приложение может не подключать `process-manager-task-queue` и объявить
+свой bean `ProcessCommandScheduler`.

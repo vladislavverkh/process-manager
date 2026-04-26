@@ -2,6 +2,38 @@
 
 `process-manager-task-queue` использует `task-queue-postgres` как durable executor.
 
+Это опциональный adapter. Базовый runtime зависит только от `ProcessCommandScheduler`, поэтому
+другая инфраструктура команд может подключиться своей реализацией этого интерфейса.
+
+## Подключение
+
+```kotlin
+implementation("dev.verkhovskiy:task-queue-spring-boot-starter")
+implementation("dev.verkhovskiy:process-manager-spring-boot-starter")
+implementation("dev.verkhovskiy:process-manager-task-queue")
+```
+
+Для локальной разработки модуль `process-manager-task-queue` включается в Gradle build, если рядом
+есть `../task-queue-postgres`. Явное управление:
+
+```bash
+./gradlew check -PprocessManager.includeTaskQueueAdapter=false
+./gradlew check -PprocessManager.includeTaskQueueAdapter=true
+```
+
+## Autoconfiguration
+
+Adapter создает:
+
+- `ProcessCommandScheduler`, если есть `TaskProducer`;
+- `ProcessCommandTaskHandler`, если есть `ProcessManager`.
+
+Отключение:
+
+```properties
+process.manager.task-queue.enabled=false
+```
+
 ## Task type
 
 По умолчанию используется task type:

@@ -6,7 +6,8 @@
 или другого канала.
 
 Библиотека проектируется как state-machine/process-orchestrator поверх PostgreSQL. Для
-асинхронного исполнения и отложенного resume используется `task-queue-postgres`.
+асинхронного исполнения и отложенного resume runtime использует абстракцию
+`ProcessCommandScheduler`; `task-queue-postgres` подключается отдельным adapter-модулем.
 
 ## Статус проекта
 
@@ -15,7 +16,7 @@
 - есть Gradle multi-module skeleton;
 - есть core-модель definition/state/transition/retry/retention;
 - есть PostgreSQL schema и repository для instance/wait/inbox/history;
-- есть task-queue adapter для durable process commands;
+- есть опциональный task-queue adapter для durable process commands;
 - есть Spring Boot autoconfiguration;
 - есть базовый execution loop для `ACTION`, `WAIT`, `DECISION`, terminal states, history и stale
   commands;
@@ -48,21 +49,22 @@
 
 - `process-manager-core` - модель процесса, DSL и runtime contracts.
 - `process-manager-postgres` - PostgreSQL-хранилище instance, wait, inbox и history.
-- `process-manager-task-queue` - adapter к `task-queue-postgres`.
+- `process-manager-task-queue` - опциональный adapter к `task-queue-postgres`.
 - `process-manager-spring-boot-starter` - Spring Boot autoconfiguration.
 - `process-manager-rest` - REST API для диагностики и ручных операторских действий.
 - `process-manager-testkit` - test helpers для process definitions.
 
 ## Локальная сборка
 
-Проект использует `task-queue-postgres` как composite build:
+`process-manager-task-queue` включается в Gradle build только если рядом есть
+`../task-queue-postgres` или если задано свойство:
 
 ```kotlin
-includeBuild("../task-queue-postgres")
+./gradlew check -PprocessManager.includeTaskQueueAdapter=true
 ```
 
-Проверка:
+Базовая проверка без adapter-а:
 
 ```bash
-./gradlew check
+./gradlew check -PprocessManager.includeTaskQueueAdapter=false
 ```

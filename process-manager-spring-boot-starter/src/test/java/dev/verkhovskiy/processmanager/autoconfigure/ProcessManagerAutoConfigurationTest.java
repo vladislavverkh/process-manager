@@ -11,8 +11,6 @@ import dev.verkhovskiy.processmanager.ProcessManager;
 import dev.verkhovskiy.processmanager.ProcessOperator;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
-import dev.verkhovskiy.processmanager.taskqueue.ProcessCommandTaskHandler;
-import dev.verkhovskiy.taskqueue.service.TaskProducer;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -25,7 +23,7 @@ class ProcessManagerAutoConfigurationTest {
           .withConfiguration(AutoConfigurations.of(ProcessManagerAutoConfiguration.class))
           .withBean(ObjectMapper.class, ObjectMapper::new)
           .withBean(NamedParameterJdbcTemplate.class, () -> mock(NamedParameterJdbcTemplate.class))
-          .withBean(TaskProducer.class, () -> mock(TaskProducer.class));
+          .withBean(ProcessCommandScheduler.class, () -> mock(ProcessCommandScheduler.class));
 
   @Test
   void createsProcessManagerInfrastructure() {
@@ -38,7 +36,6 @@ class ProcessManagerAutoConfigurationTest {
           assertThat(context).hasSingleBean(ProcessManager.class);
           assertThat(context).hasSingleBean(ProcessOperator.class);
           assertThat(context).hasSingleBean(ProcessDeadlineWatchdog.class);
-          assertThat(context).hasSingleBean(ProcessCommandTaskHandler.class);
         });
   }
 

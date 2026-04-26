@@ -4,7 +4,7 @@ import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Raw PostgreSQL representation of a process instance. */
+/** Низкоуровневое PostgreSQL-представление экземпляра процесса. */
 public record StoredProcessInstance(
     UUID instanceId,
     String processType,

@@ -3,7 +3,7 @@ package dev.verkhovskiy.processmanager;
 import java.time.Duration;
 import java.util.List;
 
-/** Definition of a single process state. */
+/** Описание одного состояния процесса. */
 public record StateDefinition<P>(
     String name,
     StateKind kind,
@@ -26,7 +26,7 @@ public record StateDefinition<P>(
     transitions = List.copyOf(transitions == null ? List.of() : transitions);
   }
 
-  /** Returns true when this state is terminal. */
+  /** Возвращает true, если это финальное состояние. */
   public boolean terminal() {
     return kind == StateKind.TERMINAL;
   }

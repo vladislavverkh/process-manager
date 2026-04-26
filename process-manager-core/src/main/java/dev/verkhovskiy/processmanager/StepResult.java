@@ -3,59 +3,59 @@ package dev.verkhovskiy.processmanager;
 import java.time.Duration;
 import java.util.Map;
 
-/** Result returned by an action state before transition selection. */
+/** Результат, который ACTION-состояние возвращает перед выбором перехода. */
 public sealed interface StepResult {
 
-  /** Successful action result with a business code and structured data. */
+  /** Успешный результат действия с бизнес-кодом и структурированными данными. */
   record Success(String code, Map<String, Object> data) implements StepResult {
     public Success {
       data = Map.copyOf(data == null ? Map.of() : data);
     }
   }
 
-  /** Business failure that should be routed by regular process transitions. */
+  /** Бизнес-отказ, который должен маршрутизироваться обычными переходами процесса. */
   record BusinessFailure(String code, Map<String, Object> data) implements StepResult {
     public BusinessFailure {
       data = Map.copyOf(data == null ? Map.of() : data);
     }
   }
 
-  /** Retryable technical failure. */
+  /** Техническая ошибка, которую можно повторить. */
   record RetryableFailure(String code, String message) implements StepResult {}
 
-  /** Non-retryable technical failure. */
+  /** Техническая ошибка, которую нельзя повторить. */
   record FatalFailure(String code, String message) implements StepResult {}
 
-  /** Action asks runtime to wait for an external event. */
+  /** Действие просит среду выполнения ожидать внешнее событие. */
   record AwaitEvent(String eventType, String correlationKey, Duration timeout)
       implements StepResult {}
 
-  /** Creates a successful result without additional data. */
+  /** Создает успешный результат без дополнительных данных. */
   static Success success(String code) {
     return new Success(code, Map.of());
   }
 
-  /** Creates a successful result with additional data. */
+  /** Создает успешный результат с дополнительными данными. */
   static Success success(String code, Map<String, Object> data) {
     return new Success(code, data);
   }
 
-  /** Creates a business failure result. */
+  /** Создает результат бизнес-отказа. */
   static BusinessFailure businessFailure(String code, Map<String, Object> data) {
     return new BusinessFailure(code, data);
   }
 
-  /** Creates a retryable technical failure. */
+  /** Создает техническую ошибку, которую можно повторить. */
   static RetryableFailure retryableFailure(String code, String message) {
     return new RetryableFailure(code, message);
   }
 
-  /** Creates a fatal technical failure. */
+  /** Создает фатальную техническую ошибку. */
   static FatalFailure fatalFailure(String code, String message) {
     return new FatalFailure(code, message);
   }
 
-  /** Creates an await-event result. */
+  /** Создает результат ожидания внешнего события. */
   static AwaitEvent awaitEvent(String eventType, String correlationKey, Duration timeout) {
     return new AwaitEvent(eventType, correlationKey, timeout);
   }

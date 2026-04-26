@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Context passed to conditional transitions. */
+/** Контекст, передаваемый условиям переходов. */
 public record TransitionContext<P>(
     UUID instanceId,
     String processType,

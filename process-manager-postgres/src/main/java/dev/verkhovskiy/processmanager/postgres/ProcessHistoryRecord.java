@@ -3,7 +3,7 @@ package dev.verkhovskiy.processmanager.postgres;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Process transition history record. */
+/** Запись истории перехода процесса. */
 public record ProcessHistoryRecord(
     UUID historyId,
     UUID instanceId,

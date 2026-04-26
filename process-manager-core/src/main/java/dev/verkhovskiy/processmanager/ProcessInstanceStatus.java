@@ -1,6 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
-/** Runtime status of a process instance. */
+/** Статус выполнения экземпляра процесса. */
 public enum ProcessInstanceStatus {
   RUNNING,
   WAITING,

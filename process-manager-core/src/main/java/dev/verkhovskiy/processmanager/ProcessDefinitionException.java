@@ -1,6 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
-/** Invalid process definition or transition selection error. */
+/** Ошибка невалидного описания процесса или выбора перехода. */
 public class ProcessDefinitionException extends RuntimeException {
 
   public ProcessDefinitionException(String message) {

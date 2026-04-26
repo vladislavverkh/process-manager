@@ -2,7 +2,7 @@ package dev.verkhovskiy.processmanager;
 
 import java.time.Duration;
 
-/** Retry policy for action states that fail with retryable errors. */
+/** Политика повторов для ACTION-состояний, завершившихся повторяемой ошибкой. */
 public record RetryPolicy(
     int maxAttempts, Duration initialDelay, Duration maxDelay, double multiplier) {
 
@@ -21,17 +21,17 @@ public record RetryPolicy(
     }
   }
 
-  /** No retry attempts. */
+  /** Без повторных попыток. */
   public static RetryPolicy none() {
     return new RetryPolicy(0, Duration.ofMillis(1), Duration.ofMillis(1), 1.0d);
   }
 
-  /** Exponential retry policy. */
+  /** Экспоненциальная политика повторов. */
   public static RetryPolicy exponential(int maxAttempts, Duration initialDelay, Duration maxDelay) {
     return new RetryPolicy(maxAttempts, initialDelay, maxDelay, 2.0d);
   }
 
-  /** Calculates delay before next attempt. */
+  /** Вычисляет задержку перед следующей попыткой. */
   public Duration delayForAttempt(int nextAttempt) {
     if (nextAttempt <= 1) {
       return initialDelay;

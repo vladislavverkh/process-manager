@@ -1,6 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
-/** Supported process state kinds. */
+/** Поддерживаемые типы состояний процесса. */
 public enum StateKind {
   ACTION,
   WAIT,

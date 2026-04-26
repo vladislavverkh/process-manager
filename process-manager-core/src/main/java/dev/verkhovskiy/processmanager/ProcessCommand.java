@@ -2,5 +2,5 @@ package dev.verkhovskiy.processmanager;
 
 import java.util.UUID;
 
-/** Durable command scheduled through task queue to continue process execution. */
+/** Персистентная команда, которую очередь задач планирует для продолжения исполнения процесса. */
 public record ProcessCommand(UUID instanceId, ProcessCommandReason reason, long expectedVersion) {}

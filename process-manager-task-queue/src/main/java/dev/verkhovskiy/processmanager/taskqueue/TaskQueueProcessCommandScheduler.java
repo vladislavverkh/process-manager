@@ -8,10 +8,11 @@ import dev.verkhovskiy.taskqueue.service.TaskProducer;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.time.Duration;
 
-/** Schedules process resume commands through task-queue-postgres. */
+/** Планирует команды возобновления процесса через task-queue-postgres. */
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
-    justification = "TaskProducer and ObjectMapper are injected infrastructure beans.")
+    justification =
+        "TaskProducer и ObjectMapper являются внедренными инфраструктурными Spring-бинами.")
 public class TaskQueueProcessCommandScheduler implements ProcessCommandScheduler {
 
   public static final String TASK_TYPE = "process-manager.command";

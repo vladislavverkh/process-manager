@@ -3,7 +3,7 @@ package dev.verkhovskiy.processmanager.postgres;
 import java.time.Instant;
 import java.util.UUID;
 
-/** External event wait registered by a process instance. */
+/** Ожидание внешнего события, зарегистрированное экземпляром процесса. */
 public record StoredProcessWait(
     UUID waitId,
     UUID instanceId,

@@ -2,7 +2,7 @@ package dev.verkhovskiy.processmanager;
 
 import java.time.Duration;
 
-/** Schedules durable commands that drive process execution. */
+/** Планирует персистентные команды, которые обеспечивают исполнение процесса. */
 public interface ProcessCommandScheduler {
 
   void schedule(ProcessCommand command, String partitionKey);

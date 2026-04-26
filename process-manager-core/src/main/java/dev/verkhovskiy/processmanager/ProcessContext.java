@@ -3,7 +3,7 @@ package dev.verkhovskiy.processmanager;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Context passed to process actions. */
+/** Контекст, передаваемый действию процесса. */
 public record ProcessContext<P>(
     UUID instanceId,
     String processType,

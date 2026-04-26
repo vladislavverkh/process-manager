@@ -3,7 +3,7 @@ package dev.verkhovskiy.processmanager;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Versioned process scenario definition. */
+/** Версионированное описание сценария процесса. */
 public record ProcessDefinition<P>(
     String processType,
     int version,
@@ -34,12 +34,12 @@ public record ProcessDefinition<P>(
     validate(initialState, states);
   }
 
-  /** Creates a typed process definition builder. */
+  /** Создает типизированный построитель описания процесса. */
   public static <P> ProcessDefinitionBuilder<P> builder(String processType, Class<P> payloadType) {
     return new ProcessDefinitionBuilder<>(processType, payloadType);
   }
 
-  /** Returns state definition by name. */
+  /** Возвращает описание состояния по имени. */
   public StateDefinition<P> state(String name) {
     StateDefinition<P> state = states.get(name);
     if (state == null) {

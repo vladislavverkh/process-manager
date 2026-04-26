@@ -1,6 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
-/** Conditional transition from one process state to another. */
+/** Условный переход из одного состояния процесса в другое. */
 public record TransitionDefinition<P>(
     String name, String targetState, int priority, TransitionCondition<P> condition) {
 
@@ -16,7 +16,7 @@ public record TransitionDefinition<P>(
     }
   }
 
-  /** Transition that always matches. */
+  /** Переход, который подходит всегда. */
   public static <P> TransitionDefinition<P> always(String name, String targetState) {
     return new TransitionDefinition<>(name, targetState, Integer.MAX_VALUE, context -> true);
   }

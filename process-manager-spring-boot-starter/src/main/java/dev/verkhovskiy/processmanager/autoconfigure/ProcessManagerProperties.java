@@ -7,7 +7,7 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
-/** Configuration properties for process-manager runtime. */
+/** Конфигурационные свойства среды выполнения process-manager. */
 @Validated
 @Getter
 @Setter

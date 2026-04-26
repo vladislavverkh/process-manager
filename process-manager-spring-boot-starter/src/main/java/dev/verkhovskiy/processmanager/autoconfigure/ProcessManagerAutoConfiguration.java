@@ -20,7 +20,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
-/** Spring Boot autoconfiguration for process-manager. */
+/** Автоконфигурация Spring Boot для process-manager. */
 @AutoConfiguration
 @EnableConfigurationProperties(ProcessManagerProperties.class)
 @ConditionalOnProperty(

@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.verkhovskiy.processmanager.ProcessDefinition;
 import dev.verkhovskiy.processmanager.StateKind;
 
-/** Assertions for process definition tests. */
+/** Проверки для тестов описания процесса. */
 public final class ProcessDefinitionAssertions {
 
   private ProcessDefinitionAssertions() {}

@@ -2,7 +2,7 @@ package dev.verkhovskiy.processmanager;
 
 import java.time.Duration;
 
-/** Retention policy for terminal process instances. */
+/** Политика хранения финальных экземпляров процессов. */
 public record ProcessRetention(Duration completed, Duration failed, Duration cancelled) {
 
   public ProcessRetention {

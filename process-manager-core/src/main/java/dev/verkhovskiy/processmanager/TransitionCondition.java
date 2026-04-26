@@ -1,6 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
-/** Predicate deciding whether a transition can be taken. */
+/** Предикат, определяющий, можно ли выполнить переход. */
 @FunctionalInterface
 public interface TransitionCondition<P> {
 

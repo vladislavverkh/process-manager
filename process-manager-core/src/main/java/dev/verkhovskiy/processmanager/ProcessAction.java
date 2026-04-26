@@ -1,6 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
-/** Business action executed by an ACTION state. */
+/** Бизнес-действие, выполняемое ACTION-состоянием. */
 @FunctionalInterface
 public interface ProcessAction<P> {
 

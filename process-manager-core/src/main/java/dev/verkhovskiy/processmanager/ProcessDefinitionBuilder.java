@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/** Fluent builder for process definitions with conditional transitions. */
+/** Цепочный построитель описания процесса с условными переходами. */
 public final class ProcessDefinitionBuilder<P> {
 
   private final String processType;
@@ -98,7 +98,7 @@ public final class ProcessDefinitionBuilder<P> {
     }
   }
 
-  /** Builder for state transitions and retry policy. */
+  /** Построитель переходов состояния и политики повторов. */
   public static final class StateBuilder<P> {
 
     private final String name;

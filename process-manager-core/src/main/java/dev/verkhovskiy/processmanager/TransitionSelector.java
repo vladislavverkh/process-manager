@@ -3,7 +3,7 @@ package dev.verkhovskiy.processmanager;
 import java.util.Comparator;
 import java.util.List;
 
-/** Selects exactly one outgoing transition for a state. */
+/** Выбирает ровно один исходящий переход для состояния. */
 public class TransitionSelector {
 
   public <P> TransitionDefinition<P> select(

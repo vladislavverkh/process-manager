@@ -1,6 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
-/** Reason why process execution is scheduled. */
+/** Причина, по которой запланировано исполнение процесса. */
 public enum ProcessCommandReason {
   START,
   RESUME,

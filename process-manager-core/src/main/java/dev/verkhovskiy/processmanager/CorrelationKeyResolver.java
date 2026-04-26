@@ -1,6 +1,6 @@
 package dev.verkhovskiy.processmanager;
 
-/** Resolves correlation key for a WAIT state. */
+/** Вычисляет ключ корреляции для WAIT-состояния. */
 @FunctionalInterface
 public interface CorrelationKeyResolver<P> {
 

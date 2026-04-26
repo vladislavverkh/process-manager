@@ -5,7 +5,7 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Registry of versioned process definitions. */
+/** Реестр версионированных описаний процессов. */
 public class ProcessDefinitionRegistry {
 
   private final Map<DefinitionKey, ProcessDefinition<?>> definitions = new ConcurrentHashMap<>();

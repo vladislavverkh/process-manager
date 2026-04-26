@@ -3,7 +3,7 @@ package dev.verkhovskiy.processmanager;
 import java.time.Instant;
 import java.util.Map;
 
-/** External event used to resume a waiting process instance. */
+/** Внешнее событие, которое возобновляет ожидающий экземпляр процесса. */
 public record ExternalEvent(
     String eventType, String correlationKey, Map<String, Object> payload, Instant receivedAt) {
 

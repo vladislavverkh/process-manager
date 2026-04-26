@@ -25,6 +25,7 @@ ProcessManagerAutoConfiguration
 | `ProcessInspector` | Есть `PostgresProcessRepository` и `ObjectMapper` |
 | `ProcessCommandScheduler` | Есть `TaskProducer` |
 | `ProcessManager` | Есть registry, repository, scheduler и `ObjectMapper` |
+| `ProcessOperator` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessDeadlineWatchdog` | Есть repository и scheduler |
 | `ProcessCommandTaskHandler` | Есть `ProcessManager` |
 
@@ -98,6 +99,20 @@ List<ProcessInstanceView> waitingPayments =
 ```
 
 `ProcessDetailsView` содержит текущий instance, зарегистрированные wait points и историю переходов.
+
+## Ручные операции
+
+Starter создает bean `ProcessOperator` для операторских действий:
+
+```java
+processOperator.cancel(instanceId, "customer request");
+processOperator.scheduleResume(instanceId);
+processOperator.scheduleRetry(instanceId);
+```
+
+`cancel(...)` переводит только активный процесс в `CANCELLED`, удаляет wait points и пишет history
+с trigger type `MANUAL_CANCEL`. `scheduleResume(...)` и `scheduleRetry(...)` ставят command в очередь
+с текущей `version`, поэтому команда станет stale, если процесс успеет измениться раньше.
 
 ## Deadline watchdog
 

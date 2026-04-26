@@ -6,9 +6,11 @@ import dev.verkhovskiy.processmanager.ProcessDefinition;
 import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
 import dev.verkhovskiy.processmanager.ProcessInspector;
 import dev.verkhovskiy.processmanager.ProcessManager;
+import dev.verkhovskiy.processmanager.ProcessOperator;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessInspector;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessManager;
+import dev.verkhovskiy.processmanager.runtime.PostgresProcessOperator;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
 import dev.verkhovskiy.processmanager.taskqueue.ProcessCommandTaskHandler;
 import dev.verkhovskiy.processmanager.taskqueue.TaskQueueProcessCommandScheduler;
@@ -71,6 +73,18 @@ public class ProcessManagerAutoConfiguration {
       ProcessCommandScheduler commandScheduler,
       ObjectMapper objectMapper) {
     return new PostgresProcessManager(
+        definitionRegistry, processRepository, commandScheduler, objectMapper);
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  @ConditionalOnBean({PostgresProcessRepository.class, ProcessCommandScheduler.class})
+  ProcessOperator processOperator(
+      ProcessDefinitionRegistry definitionRegistry,
+      PostgresProcessRepository processRepository,
+      ProcessCommandScheduler commandScheduler,
+      ObjectMapper objectMapper) {
+    return new PostgresProcessOperator(
         definitionRegistry, processRepository, commandScheduler, objectMapper);
   }
 

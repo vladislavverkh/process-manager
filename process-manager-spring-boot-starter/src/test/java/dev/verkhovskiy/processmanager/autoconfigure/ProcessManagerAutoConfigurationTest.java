@@ -8,6 +8,7 @@ import dev.verkhovskiy.processmanager.ProcessCommandScheduler;
 import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
 import dev.verkhovskiy.processmanager.ProcessInspector;
 import dev.verkhovskiy.processmanager.ProcessManager;
+import dev.verkhovskiy.processmanager.ProcessOperator;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
 import dev.verkhovskiy.processmanager.taskqueue.ProcessCommandTaskHandler;
@@ -35,6 +36,7 @@ class ProcessManagerAutoConfigurationTest {
           assertThat(context).hasSingleBean(ProcessInspector.class);
           assertThat(context).hasSingleBean(ProcessCommandScheduler.class);
           assertThat(context).hasSingleBean(ProcessManager.class);
+          assertThat(context).hasSingleBean(ProcessOperator.class);
           assertThat(context).hasSingleBean(ProcessDeadlineWatchdog.class);
           assertThat(context).hasSingleBean(ProcessCommandTaskHandler.class);
         });

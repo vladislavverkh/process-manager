@@ -190,6 +190,18 @@ History - это audit trail процесса. Она не должна испо
 дедлайн не позднее указанного момента и `limit`. Эти запросы предназначены для чтения и не должны
 использоваться как часть логики выбора transitions.
 
+## Operator API
+
+`ProcessOperator` выполняет ручные операционные действия:
+
+- `cancel(instanceId, reason)` - переводит активный процесс в `CANCELLED`;
+- `scheduleResume(instanceId)` - планирует ручной `RESUME` с текущей `version`;
+- `scheduleRetry(instanceId)` - планирует ручной `RETRY` для процесса в статусе `RUNNING`.
+
+Отмена удаляет wait points, записывает history с `trigger_type = MANUAL_CANCEL`, сохраняет
+`_pm.lastCancel` и обновляет `_pm.lastTrigger`. Старые versioned commands станут stale после
+инкремента `version`, а unversioned resume commands игнорируются для terminal instances.
+
 ## Retention
 
 При входе в terminal state runtime должен выставить:

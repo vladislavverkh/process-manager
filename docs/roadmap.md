@@ -46,6 +46,10 @@
   - find active instance by `processType + businessKey`;
   - list instances by filters;
   - read waits and history for diagnostics.
+- Operator API:
+  - cancel active process instance;
+  - schedule manual resume;
+  - schedule manual retry for RUNNING instances.
 - Process definition validation:
   - required ACTION/WAIT/TERMINAL fields;
   - duplicate transition priorities;
@@ -78,7 +82,6 @@
 
 1. Admin/observability:
    - aggregated summary по process instances;
-   - manual retry/cancel;
    - Micrometer metrics.
 
 2. Retention job:

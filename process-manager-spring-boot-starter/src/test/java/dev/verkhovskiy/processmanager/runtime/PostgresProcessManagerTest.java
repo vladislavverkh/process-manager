@@ -645,6 +645,20 @@ class PostgresProcessManagerTest {
     verifyNoInteractions(commandScheduler);
   }
 
+  @Test
+  void skipsTerminalInstanceForUnversionedCommand() {
+    ProcessDefinition<PaymentPayload> definition = simpleDefinition();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(Optional.of(instance("SEND", ProcessInstanceStatus.CANCELLED, 4)));
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RESUME, -1));
+
+    verify(processRepository, never())
+        .updateExecutionState(any(), anyLong(), any(), any(), any(), any(), any(), any(), any());
+    verifyNoInteractions(commandScheduler);
+  }
+
   private PostgresProcessManager manager(ProcessDefinition<PaymentPayload> definition) {
     return new PostgresProcessManager(
         new ProcessDefinitionRegistry(List.of(definition)),

@@ -154,6 +154,9 @@ public class PostgresProcessManager implements ProcessManager {
     if (command.expectedVersion() >= 0 && instance.version() != command.expectedVersion()) {
       return;
     }
+    if (terminalInstanceStatus(instance.status())) {
+      return;
+    }
     ProcessDefinition<?> definition =
         definitionRegistry.get(instance.processType(), instance.definitionVersion());
     execute(command, instance, typed(definition));
@@ -680,6 +683,12 @@ public class PostgresProcessManager implements ProcessManager {
           "Terminal state must define terminal status: " + stateDefinition.name());
     }
     return terminalStatus;
+  }
+
+  private static boolean terminalInstanceStatus(ProcessInstanceStatus status) {
+    return status == ProcessInstanceStatus.COMPLETED
+        || status == ProcessInstanceStatus.FAILED
+        || status == ProcessInstanceStatus.CANCELLED;
   }
 
   private static Instant deleteAfter(

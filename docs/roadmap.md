@@ -41,6 +41,11 @@
 - Idempotency:
   - repeated `start(processType, businessKey, payload)` returns active instance;
   - optional `signal(..., idempotencyKey, payload)` deduplicates inbox events.
+- Inspection API:
+  - find process instance by id;
+  - find active instance by `processType + businessKey`;
+  - list instances by filters;
+  - read waits and history for diagnostics.
 - Process definition validation:
   - required ACTION/WAIT/TERMINAL fields;
   - duplicate transition priorities;
@@ -72,8 +77,7 @@
 ## Следующие этапы
 
 1. Admin/observability:
-   - summary по process instances;
-   - список waiting instances;
+   - aggregated summary по process instances;
    - manual retry/cancel;
    - Micrometer metrics.
 

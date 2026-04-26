@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.verkhovskiy.processmanager.ProcessCommandScheduler;
 import dev.verkhovskiy.processmanager.ProcessDefinition;
 import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
+import dev.verkhovskiy.processmanager.ProcessInspector;
 import dev.verkhovskiy.processmanager.ProcessManager;
+import dev.verkhovskiy.processmanager.postgres.PostgresProcessInspector;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessManager;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
@@ -42,6 +44,14 @@ public class ProcessManagerAutoConfiguration {
   @ConditionalOnClass(NamedParameterJdbcTemplate.class)
   PostgresProcessRepository postgresProcessRepository(NamedParameterJdbcTemplate jdbcTemplate) {
     return new PostgresProcessRepository(jdbcTemplate);
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  @ConditionalOnBean({PostgresProcessRepository.class, ObjectMapper.class})
+  ProcessInspector processInspector(
+      PostgresProcessRepository processRepository, ObjectMapper objectMapper) {
+    return new PostgresProcessInspector(processRepository, objectMapper);
   }
 
   @Bean

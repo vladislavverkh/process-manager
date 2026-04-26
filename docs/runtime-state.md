@@ -175,6 +175,21 @@ created_at
 
 History - это audit trail процесса. Она не должна использоваться как источник текущего состояния.
 
+## Inspection API
+
+Для операционной диагностики runtime предоставляет `ProcessInspector`:
+
+- `findInstance(instanceId)` - текущий snapshot процесса;
+- `findActiveInstance(processType, businessKey)` - активный instance для business key;
+- `findInstances(query)` - список процессов по фильтрам;
+- `findWaits(instanceId)` - wait points процесса;
+- `findHistory(instanceId)` - история переходов;
+- `findDetails(instanceId)` - instance, waits и history одним объектом.
+
+Фильтр `ProcessInstanceQuery` поддерживает `processType`, `businessKey`, `state`, набор `statuses`,
+дедлайн не позднее указанного момента и `limit`. Эти запросы предназначены для чтения и не должны
+использоваться как часть логики выбора transitions.
+
 ## Retention
 
 При входе в terminal state runtime должен выставить:

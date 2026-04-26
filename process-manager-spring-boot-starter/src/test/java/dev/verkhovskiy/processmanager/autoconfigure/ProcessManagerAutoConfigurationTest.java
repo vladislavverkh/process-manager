@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.verkhovskiy.processmanager.ProcessCommandScheduler;
 import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
+import dev.verkhovskiy.processmanager.ProcessInspector;
 import dev.verkhovskiy.processmanager.ProcessManager;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
@@ -31,6 +32,7 @@ class ProcessManagerAutoConfigurationTest {
         context -> {
           assertThat(context).hasSingleBean(ProcessDefinitionRegistry.class);
           assertThat(context).hasSingleBean(PostgresProcessRepository.class);
+          assertThat(context).hasSingleBean(ProcessInspector.class);
           assertThat(context).hasSingleBean(ProcessCommandScheduler.class);
           assertThat(context).hasSingleBean(ProcessManager.class);
           assertThat(context).hasSingleBean(ProcessDeadlineWatchdog.class);

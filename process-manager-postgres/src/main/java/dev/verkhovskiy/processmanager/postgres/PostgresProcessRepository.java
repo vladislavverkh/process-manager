@@ -1,5 +1,6 @@
 package dev.verkhovskiy.processmanager.postgres;
 
+import dev.verkhovskiy.processmanager.ProcessInstanceQuery;
 import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.sql.ResultSet;
@@ -64,6 +65,19 @@ public class PostgresProcessRepository {
               toInstant(rs, "received_at"),
               toInstant(rs, "consumed_at"));
 
+  private static final RowMapper<ProcessHistoryRecord> HISTORY_MAPPER =
+      (rs, rowNum) ->
+          new ProcessHistoryRecord(
+              rs.getObject("history_id", UUID.class),
+              rs.getObject("instance_id", UUID.class),
+              rs.getString("process_type"),
+              rs.getString("from_state"),
+              rs.getString("to_state"),
+              rs.getString("transition_name"),
+              rs.getString("trigger_type"),
+              rs.getString("trigger_json"),
+              toInstant(rs, "created_at"));
+
   private final NamedParameterJdbcTemplate jdbc;
 
   public PostgresProcessRepository(NamedParameterJdbcTemplate jdbc) {
@@ -114,6 +128,97 @@ public class PostgresProcessRepository {
             )
             """,
         instanceParameters(instance));
+  }
+
+  /** Находит экземпляр процесса без блокировки строки. */
+  public Optional<StoredProcessInstance> findInstance(UUID instanceId) {
+    List<StoredProcessInstance> rows =
+        jdbc.query(
+            """
+            select instance_id,
+                   process_type,
+                   definition_version,
+                   payload_schema_version,
+                   business_key,
+                   state,
+                   status,
+                   payload_json::text as payload_json,
+                   variables_json::text as variables_json,
+                   started_at,
+                   updated_at,
+                   process_deadline_at,
+                   state_entered_at,
+                   state_deadline_at,
+                   completed_at,
+                   delete_after,
+                   version
+              from pm_process_instance
+             where instance_id = :instanceId
+            """,
+            new MapSqlParameterSource("instanceId", instanceId),
+            INSTANCE_MAPPER);
+    return rows.stream().findFirst();
+  }
+
+  /** Ищет экземпляры процессов по диагностическому фильтру. */
+  public List<StoredProcessInstance> findInstances(ProcessInstanceQuery query) {
+    ProcessInstanceQuery effectiveQuery = query == null ? ProcessInstanceQuery.all() : query;
+    StringBuilder sql =
+        new StringBuilder(
+            """
+            select instance_id,
+                   process_type,
+                   definition_version,
+                   payload_schema_version,
+                   business_key,
+                   state,
+                   status,
+                   payload_json::text as payload_json,
+                   variables_json::text as variables_json,
+                   started_at,
+                   updated_at,
+                   process_deadline_at,
+                   state_entered_at,
+                   state_deadline_at,
+                   completed_at,
+                   delete_after,
+                   version
+              from pm_process_instance
+             where 1 = 1
+            """);
+    MapSqlParameterSource parameters = new MapSqlParameterSource();
+    if (hasText(effectiveQuery.processType())) {
+      sql.append("   and process_type = :processType\n");
+      parameters.addValue("processType", effectiveQuery.processType());
+    }
+    if (hasText(effectiveQuery.businessKey())) {
+      sql.append("   and business_key = :businessKey\n");
+      parameters.addValue("businessKey", effectiveQuery.businessKey());
+    }
+    if (hasText(effectiveQuery.state())) {
+      sql.append("   and state = :state\n");
+      parameters.addValue("state", effectiveQuery.state());
+    }
+    if (!effectiveQuery.statuses().isEmpty()) {
+      sql.append("   and status in (:statuses)\n");
+      parameters.addValue(
+          "statuses", effectiveQuery.statuses().stream().map(ProcessInstanceStatus::name).toList());
+    }
+    if (effectiveQuery.deadlineAtOrBefore() != null) {
+      sql.append(
+          """
+             and (
+                    (process_deadline_at is not null and process_deadline_at <= :deadlineAtOrBefore)
+                 or (state_deadline_at is not null and state_deadline_at <= :deadlineAtOrBefore)
+             )
+          """);
+      parameters.addValue(
+          "deadlineAtOrBefore", toOffsetDateTime(effectiveQuery.deadlineAtOrBefore()));
+    }
+    sql.append(" order by updated_at desc, instance_id desc\n");
+    sql.append(" limit :limit\n");
+    parameters.addValue("limit", effectiveQuery.limit());
+    return jdbc.query(sql.toString(), parameters, INSTANCE_MAPPER);
   }
 
   /** Вставляет новый активный экземпляр процесса, если такого business key еще нет. */
@@ -383,6 +488,26 @@ public class PostgresProcessRepository {
         WAIT_MAPPER);
   }
 
+  /** Находит ожидания, зарегистрированные указанным экземпляром процесса. */
+  public List<StoredProcessWait> findWaitsByInstance(UUID instanceId) {
+    return jdbc.query(
+        """
+            select wait_id,
+                   instance_id,
+                   process_type,
+                   state,
+                   event_type,
+                   correlation_key,
+                   expires_at,
+                   created_at
+              from pm_process_wait
+             where instance_id = :instanceId
+             order by created_at, wait_id
+            """,
+        new MapSqlParameterSource("instanceId", instanceId),
+        WAIT_MAPPER);
+  }
+
   /** Удаляет все ожидания для экземпляра процесса. */
   public int deleteWaits(UUID instanceId) {
     return jdbc.update(
@@ -515,6 +640,31 @@ public class PostgresProcessRepository {
             .addValue("createdAt", toOffsetDateTime(history.createdAt())));
   }
 
+  /** Находит историю переходов указанного экземпляра процесса. */
+  public List<ProcessHistoryRecord> findHistory(UUID instanceId, int limit) {
+    if (limit <= 0) {
+      throw new IllegalArgumentException("limit must be positive");
+    }
+    return jdbc.query(
+        """
+            select history_id,
+                   instance_id,
+                   process_type,
+                   from_state,
+                   to_state,
+                   transition_name,
+                   trigger_type,
+                   trigger_json::text as trigger_json,
+                   created_at
+              from pm_process_history
+             where instance_id = :instanceId
+             order by created_at, history_id
+             limit :limit
+            """,
+        new MapSqlParameterSource().addValue("instanceId", instanceId).addValue("limit", limit),
+        HISTORY_MAPPER);
+  }
+
   /** Удаляет финальные экземпляры процессов с истекшим сроком хранения. */
   public int deleteExpiredTerminalInstances(int limit) {
     return jdbc.update(
@@ -568,5 +718,9 @@ public class PostgresProcessRepository {
 
   private static OffsetDateTime toOffsetDateTime(Instant instant) {
     return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
+  }
+
+  private static boolean hasText(String value) {
+    return value != null && !value.isBlank();
   }
 }

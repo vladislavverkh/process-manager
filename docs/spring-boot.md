@@ -22,6 +22,7 @@ ProcessManagerAutoConfiguration
 | --- | --- |
 | `ProcessDefinitionRegistry` | Всегда, если включен starter |
 | `PostgresProcessRepository` | Есть `NamedParameterJdbcTemplate` |
+| `ProcessInspector` | Есть `PostgresProcessRepository` и `ObjectMapper` |
 | `ProcessCommandScheduler` | Есть `TaskProducer` |
 | `ProcessManager` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessDeadlineWatchdog` | Есть repository и scheduler |
@@ -78,6 +79,25 @@ class PaymentProcessConfiguration {
 
 `ProcessDefinitionRegistry` принимает `List<ProcessDefinition<?>>` и индексирует definitions по
 `processType + version`.
+
+## Диагностика процессов
+
+Starter создает bean `ProcessInspector`. Он читает состояние без блокировок исполнения и не меняет
+runtime-данные:
+
+```java
+Optional<ProcessDetailsView> details = processInspector.findDetails(instanceId);
+
+List<ProcessInstanceView> waitingPayments =
+    processInspector.findInstances(
+        ProcessInstanceQuery.builder()
+            .processType("payment")
+            .status(ProcessInstanceStatus.WAITING)
+            .limit(100)
+            .build());
+```
+
+`ProcessDetailsView` содержит текущий instance, зарегистрированные wait points и историю переходов.
 
 ## Deadline watchdog
 

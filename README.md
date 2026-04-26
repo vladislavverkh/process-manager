@@ -26,6 +26,7 @@
 - есть структурная валидация process definitions и базовый testkit для проверок графа;
 - есть идемпотентный повторный `start` для активного business key и optional idempotency key для
   `signal`;
+- есть `ProcessInspector` для чтения instance, wait points и history без изменения процесса;
 - payload validation и полноценная retry-модель еще развиваются.
 
 ## Документация

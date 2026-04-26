@@ -51,8 +51,8 @@ task-queue-postgres
 4. Runtime schedules `ProcessCommand(reason=START)` through `ProcessCommandScheduler`.
 5. Task queue worker later executes the command and resumes the instance.
 
-Current implementation creates the instance and schedules the command. Full state execution is a
-next roadmap item.
+Current implementation creates the instance, schedules the command and lets the runtime execute
+state transitions from the stored instance state.
 
 ### External signal
 
@@ -66,10 +66,11 @@ next roadmap item.
 1. `ProcessCommandTaskHandler` receives `process-manager.command` from task queue.
 2. It deserializes `ProcessCommand`.
 3. It calls `ProcessManager.resume(instanceId)`.
-4. Runtime must lock the instance, evaluate current state and execute next transition.
+4. Runtime locks the instance, checks command version, evaluates current state and executes the next
+   transition.
 
-Current implementation locks and validates existence of the instance. Full ACTION/WAIT/DECISION
-execution is not implemented yet.
+Current implementation handles ACTION, WAIT, DECISION and TERMINAL states in the PostgreSQL-backed
+runtime. Retry and timeout routing are intentionally still limited and tracked in the roadmap.
 
 ## Почему task-queue-postgres не хранит process payload
 
@@ -103,4 +104,3 @@ Queue payload должен быть маленьким и техническим
 - lease/ownership worker'ов;
 - delayed retry/resume commands;
 - backpressure на уровне очереди.
-

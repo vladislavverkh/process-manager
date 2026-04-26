@@ -17,7 +17,9 @@
 - есть PostgreSQL schema и repository для instance/wait/inbox/history;
 - есть task-queue adapter для durable process commands;
 - есть Spring Boot autoconfiguration;
-- полноценный execution loop для `ACTION`, `WAIT`, `DECISION` еще предстоит реализовать.
+- есть базовый execution loop для `ACTION`, `WAIT`, `DECISION`, terminal states, history и stale
+  commands;
+- variable updates, полноценная retry-модель и timeout transition handling еще развиваются.
 
 ## Документация
 
@@ -52,4 +54,3 @@ includeBuild("../task-queue-postgres")
 ```bash
 ./gradlew check
 ```
-

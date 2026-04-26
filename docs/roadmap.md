@@ -24,22 +24,26 @@
   - `TaskQueueProcessCommandScheduler`
   - `ProcessCommandTaskHandler`
 - Spring Boot autoconfiguration.
+- Basic execution loop:
+  - load instance for update;
+  - resolve definition by `processType + definitionVersion`;
+  - deserialize typed payload and variables;
+  - execute `ACTION`;
+  - register `WAIT`;
+  - evaluate `DECISION`;
+  - enter terminal state;
+  - write history;
+  - skip stale commands by `expectedVersion`.
 
 ## Ближайший MVP
 
-1. Реализовать execution loop:
-   - load instance for update;
-   - resolve definition by `processType + definitionVersion`;
-   - deserialize payload/variables;
-   - execute `ACTION`;
-   - register `WAIT`;
-   - evaluate `DECISION`;
-   - enter terminal state;
-   - write history;
-   - schedule retry/timeout commands.
+1. Довести retry и timeout execution:
+   - formalize retry counters/metadata;
+   - route exhausted retry outcomes;
+   - choose timeout transition explicitly;
+   - add metrics for skipped stale commands.
 
-2. Добавить payload mapper:
-   - typed JSON deserialize по `payloadType`;
+2. Довести payload mapper:
    - validation error handling;
    - отделить `payload_schema_version` от `definition_version`.
 
@@ -94,4 +98,3 @@
 - Partitioned history tables.
 - YAML/JSON process definitions, если Java DSL станет недостаточным.
 - Outbox для команд во внешние системы, если понадобится exactly-once интеграция.
-

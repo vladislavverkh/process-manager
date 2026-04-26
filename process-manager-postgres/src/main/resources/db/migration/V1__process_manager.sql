@@ -58,6 +58,7 @@ create table if not exists pm_process_event_inbox (
     event_id uuid primary key,
     event_type varchar(128) not null,
     correlation_key varchar(512) not null,
+    idempotency_key varchar(512),
     payload_json jsonb not null,
     received_at timestamptz not null,
     consumed_at timestamptz
@@ -65,6 +66,10 @@ create table if not exists pm_process_event_inbox (
 
 create index if not exists pm_process_event_inbox_correlation_idx
     on pm_process_event_inbox(event_type, correlation_key);
+
+create unique index if not exists pm_process_event_inbox_idempotency_uq
+    on pm_process_event_inbox(event_type, correlation_key, idempotency_key)
+    where idempotency_key is not null;
 
 create table if not exists pm_process_history (
     history_id uuid primary key,

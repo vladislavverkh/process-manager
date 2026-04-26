@@ -66,9 +66,13 @@ process-manager-postgres/src/main/resources/db/migration/V1__process_manager.sql
 | `event_id` | Primary key события |
 | `event_type` | Тип события |
 | `correlation_key` | Ключ корреляции |
+| `idempotency_key` | Ключ идемпотентности внешней доставки |
 | `payload_json` | Payload события |
 | `received_at` | Время приема |
 | `consumed_at` | Время обработки, пока не используется |
+
+Уникальный индекс `(event_type, correlation_key, idempotency_key)` включается только для строк с
+непустым `idempotency_key`. Это сохраняет обратную совместимость для неидемпотентного `signal(...)`.
 
 ### pm_process_history
 

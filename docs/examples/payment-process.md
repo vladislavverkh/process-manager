@@ -133,10 +133,12 @@ Kafka listener должен преобразовать сообщение в pro
 processManager.signal(
     "payment.result",
     event.paymentId(),
+    event.eventId(),
     Map.of(
         "status", event.status(),
         "providerOperationId", event.providerOperationId()));
 ```
 
 После signal runtime сохраняет событие в inbox, находит wait point по
-`event_type + correlation_key` и ставит resume command в task queue.
+`event_type + correlation_key` и ставит resume command в task queue. `event.eventId()` используется
+как idempotency key, поэтому повторная доставка того же события не создаст повторное inbox-событие.

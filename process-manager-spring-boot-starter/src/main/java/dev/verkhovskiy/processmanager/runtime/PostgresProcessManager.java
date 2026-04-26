@@ -73,7 +73,7 @@ public class PostgresProcessManager implements ProcessManager {
     StateDefinition<?> initialState = definition.state(definition.initialState());
     UUID instanceId = UUID.randomUUID();
     Instant now = Instant.now();
-    processRepository.insertInstance(
+    StoredProcessInstance newInstance =
         new StoredProcessInstance(
             instanceId,
             definition.processType(),
@@ -91,7 +91,16 @@ public class PostgresProcessManager implements ProcessManager {
             stateDeadlineAt(initialState, now),
             null,
             null,
-            0));
+            0);
+    if (!processRepository.insertInstanceIfActiveAbsent(newInstance)) {
+      return processRepository
+          .findActiveInstance(definition.processType(), businessKey)
+          .map(StoredProcessInstance::instanceId)
+          .orElseThrow(
+              () ->
+                  new IllegalStateException(
+                      "Active process instance was not found after idempotent start conflict"));
+    }
     commandScheduler.schedule(
         new ProcessCommand(instanceId, ProcessCommandReason.START, 0),
         partitionKey(processType, businessKey));
@@ -101,8 +110,24 @@ public class PostgresProcessManager implements ProcessManager {
   @Override
   @Transactional
   public void signal(String eventType, String correlationKey, Map<String, Object> payload) {
+    signal(eventType, correlationKey, null, payload);
+  }
+
+  @Override
+  @Transactional
+  public void signal(
+      String eventType, String correlationKey, String idempotencyKey, Map<String, Object> payload) {
     UUID eventId = UUID.randomUUID();
-    processRepository.insertEvent(eventId, eventType, correlationKey, toJson(payload));
+    boolean inserted =
+        processRepository.insertEvent(
+            eventId,
+            eventType,
+            correlationKey,
+            normalizeIdempotencyKey(idempotencyKey),
+            toJson(payload));
+    if (!inserted) {
+      return;
+    }
     for (StoredProcessWait wait : processRepository.findWaits(eventType, correlationKey)) {
       commandScheduler.schedule(
           new ProcessCommand(wait.instanceId(), ProcessCommandReason.RESUME, -1),
@@ -269,6 +294,7 @@ public class PostgresProcessManager implements ProcessManager {
         new ExternalEvent(
             event.get().eventType(),
             event.get().correlationKey(),
+            event.get().idempotencyKey(),
             readMap(event.get().payloadJson(), "event payload"),
             event.get().receivedAt());
     ExecutionState<P> updated =
@@ -719,15 +745,15 @@ public class PostgresProcessManager implements ProcessManager {
   }
 
   private static Map<String, Object> eventTrigger(ExternalEvent event) {
-    return Map.of(
-        "eventType",
-        event.eventType(),
-        "correlationKey",
-        event.correlationKey(),
-        "payload",
-        event.payload(),
-        "receivedAt",
-        event.receivedAt().toString());
+    Map<String, Object> trigger = new LinkedHashMap<>();
+    trigger.put("eventType", event.eventType());
+    trigger.put("correlationKey", event.correlationKey());
+    if (event.idempotencyKey() != null) {
+      trigger.put("idempotencyKey", event.idempotencyKey());
+    }
+    trigger.put("payload", event.payload());
+    trigger.put("receivedAt", event.receivedAt().toString());
+    return Map.copyOf(trigger);
   }
 
   private static Map<String, Object> processTimeoutTrigger(
@@ -835,6 +861,16 @@ public class PostgresProcessManager implements ProcessManager {
 
   private static String partitionKey(String processType, String key) {
     return processType + ":" + key;
+  }
+
+  private static String normalizeIdempotencyKey(String idempotencyKey) {
+    if (idempotencyKey == null) {
+      return null;
+    }
+    if (idempotencyKey.isBlank()) {
+      throw new IllegalArgumentException("idempotencyKey must not be blank");
+    }
+    return idempotencyKey;
   }
 
   private record ExecutionState<P>(

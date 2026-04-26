@@ -51,19 +51,24 @@ already overdue.
 
 1. Caller invokes `ProcessManager.start(processType, businessKey, payload)`.
 2. Runtime finds latest `ProcessDefinition` for `processType`.
-3. Runtime creates `pm_process_instance` with initial state.
+3. Runtime creates `pm_process_instance` with initial state, если активный instance с таким
+   `processType + businessKey` еще не существует.
 4. Runtime schedules `ProcessCommand(reason=START)` through `ProcessCommandScheduler`.
 5. Task queue worker later executes the command and resumes the instance.
 
-Current implementation creates the instance, schedules the command and lets the runtime execute
-state transitions from the stored instance state.
+Повторный `start` для уже активного instance возвращает существующий `instance_id` и не планирует
+дополнительный `START`.
 
 ### External signal
 
-1. Caller or Kafka adapter invokes `ProcessManager.signal(eventType, correlationKey, payload)`.
+1. Caller invokes `ProcessManager.signal(eventType, correlationKey, payload)` или overload с
+   `idempotencyKey`.
 2. Runtime stores the event in `pm_process_event_inbox`.
 3. Runtime finds matching rows in `pm_process_wait`.
 4. Runtime schedules resume commands for matched instances.
+
+Если передан `idempotencyKey`, повторная доставка с тем же `eventType + correlationKey +
+idempotencyKey` не создает новую inbox-запись и не планирует повторный resume.
 
 ### Resume
 

@@ -38,6 +38,9 @@
   - enter terminal state;
   - write history;
   - skip stale commands by `expectedVersion`.
+- Idempotency:
+  - repeated `start(processType, businessKey, payload)` returns active instance;
+  - optional `signal(..., idempotencyKey, payload)` deduplicates inbox events.
 - Process definition validation:
   - required ACTION/WAIT/TERMINAL fields;
   - duplicate transition priorities;
@@ -68,23 +71,18 @@
 
 ## Следующие этапы
 
-1. Kafka integration module:
-   - generic listener adapter;
-   - idempotency key;
-   - mapping Kafka record -> `ExternalEvent`.
-
-2. Admin/observability:
+1. Admin/observability:
    - summary по process instances;
    - список waiting instances;
    - manual retry/cancel;
    - Micrometer metrics.
 
-3. Retention job:
+2. Retention job:
    - scheduled cleanup terminal instances;
    - cleanup metrics;
    - batch-size property.
 
-4. Testkit:
+3. Testkit:
    - deterministic definition runner без PostgreSQL;
    - fake command scheduler.
 

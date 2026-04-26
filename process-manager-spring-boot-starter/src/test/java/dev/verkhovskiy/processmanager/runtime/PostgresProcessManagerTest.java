@@ -52,11 +52,84 @@ class PostgresProcessManagerTest {
   @Mock private ProcessCommandScheduler commandScheduler;
 
   @Captor private ArgumentCaptor<ProcessHistoryRecord> historyCaptor;
+  @Captor private ArgumentCaptor<ProcessCommand> commandCaptor;
+  @Captor private ArgumentCaptor<StoredProcessInstance> instanceCaptor;
   @Captor private ArgumentCaptor<StoredProcessWait> waitCaptor;
   @Captor private ArgumentCaptor<String> variablesCaptor;
 
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final TypeReference<Map<String, Object>> mapType = new TypeReference<>() {};
+
+  @Test
+  void startInsertsInstanceAndSchedulesStartCommand() {
+    ProcessDefinition<PaymentPayload> definition = simpleDefinition();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.insertInstanceIfActiveAbsent(any())).thenReturn(true);
+
+    UUID instanceId = manager.start("payment", "payment-1", new PaymentPayload("pay-1"));
+
+    verify(processRepository).insertInstanceIfActiveAbsent(instanceCaptor.capture());
+    StoredProcessInstance instance = instanceCaptor.getValue();
+    assertThat(instance.instanceId()).isEqualTo(instanceId);
+    assertThat(instance.processType()).isEqualTo("payment");
+    assertThat(instance.businessKey()).isEqualTo("payment-1");
+    assertThat(instance.state()).isEqualTo("SEND");
+    verify(commandScheduler).schedule(commandCaptor.capture(), eq("payment:payment-1"));
+    assertThat(commandCaptor.getValue())
+        .isEqualTo(new ProcessCommand(instanceId, ProcessCommandReason.START, 0));
+  }
+
+  @Test
+  void startReturnsActiveInstanceWhenBusinessKeyAlreadyExists() {
+    ProcessDefinition<PaymentPayload> definition = simpleDefinition();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.insertInstanceIfActiveAbsent(any())).thenReturn(false);
+    when(processRepository.findActiveInstance("payment", "payment-1"))
+        .thenReturn(Optional.of(instance("SEND", ProcessInstanceStatus.RUNNING, 2)));
+
+    UUID instanceId = manager.start("payment", "payment-1", new PaymentPayload("pay-1"));
+
+    assertThat(instanceId).isEqualTo(INSTANCE_ID);
+    verify(commandScheduler, never()).schedule(any(), any());
+  }
+
+  @Test
+  void signalStoresIdempotentEventAndSchedulesWaitingInstances() {
+    PostgresProcessManager manager = manager(simpleDefinition());
+    StoredProcessWait wait =
+        new StoredProcessWait(
+            UUID.fromString("018f0000-0000-7000-8000-000000000003"),
+            INSTANCE_ID,
+            "payment",
+            "WAIT_RESULT",
+            "payment.result",
+            "pay-1",
+            null,
+            Instant.parse("2026-04-26T10:00:00Z"));
+    when(processRepository.insertEvent(
+            any(), eq("payment.result"), eq("pay-1"), eq("provider-event-1"), any()))
+        .thenReturn(true);
+    when(processRepository.findWaits("payment.result", "pay-1")).thenReturn(List.of(wait));
+
+    manager.signal("payment.result", "pay-1", "provider-event-1", Map.of("status", "APPROVED"));
+
+    verify(commandScheduler).schedule(commandCaptor.capture(), eq("payment:" + INSTANCE_ID));
+    assertThat(commandCaptor.getValue())
+        .isEqualTo(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RESUME, -1));
+  }
+
+  @Test
+  void signalDoesNotScheduleDuplicateIdempotencyKey() {
+    PostgresProcessManager manager = manager(simpleDefinition());
+    when(processRepository.insertEvent(
+            any(), eq("payment.result"), eq("pay-1"), eq("provider-event-1"), any()))
+        .thenReturn(false);
+
+    manager.signal("payment.result", "pay-1", "provider-event-1", Map.of("status", "APPROVED"));
+
+    verify(processRepository, never()).findWaits(any(), any());
+    verifyNoInteractions(commandScheduler);
+  }
 
   @Test
   void executesActionAndEntersTerminalState() throws Exception {
@@ -578,6 +651,21 @@ class PostgresProcessManagerTest {
         processRepository,
         commandScheduler,
         objectMapper);
+  }
+
+  private static ProcessDefinition<PaymentPayload> simpleDefinition() {
+    return ProcessDefinition.builder("payment", PaymentPayload.class)
+        .initialState("SEND")
+        .actionState(
+            "SEND",
+            state ->
+                state
+                    .action(ctx -> StepResult.success("OK"))
+                    .transition(
+                        transition ->
+                            transition.name("sent").targetState("DONE").condition(ctx -> true)))
+        .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+        .build();
   }
 
   private static StoredProcessInstance instance(

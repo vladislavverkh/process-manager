@@ -35,8 +35,8 @@ Action возвращает `StepResult`, после чего runtime выбир
 - `correlationKey`
 - optional timeout
 
-Когда приходит `signal(eventType, correlationKey, payload)`, runtime возобновляет процесс и выбирает
-transition по payload события.
+Когда приходит `signal(eventType, correlationKey, payload)` или overload с `idempotencyKey`, runtime
+возобновляет процесс и выбирает transition по payload события.
 
 `waitTimeout` сохраняется как `state_deadline_at` и обрабатывается watchdog'ом. Runtime не создает
 отложенную команду для каждого WAIT заранее.

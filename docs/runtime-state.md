@@ -111,6 +111,10 @@ expires_at
 Когда приходит `signal(eventType, correlationKey, payload)`, runtime ищет wait points и планирует
 resume для найденных instances.
 
+Повторный `start(processType, businessKey, payload)` для уже активного instance не создает новый
+процесс, а возвращает существующий `instance_id`. Активными считаются instances в статусах
+`RUNNING` и `WAITING`; после terminal статуса тот же `businessKey` можно использовать снова.
+
 ## Deadlines
 
 Runtime хранит дедлайны в `pm_process_instance`:
@@ -138,12 +142,23 @@ command с текущей `version`.
 event_id
 event_type
 correlation_key
+idempotency_key
 payload_json
 received_at
 consumed_at
 ```
 
-Inbox нужен для audit/debug и будущей идемпотентности Kafka/Event processing.
+Inbox нужен для audit/debug и идемпотентной обработки внешней доставки.
+
+Для идемпотентной доставки внешних событий нужно использовать overload:
+
+```java
+processManager.signal(eventType, correlationKey, idempotencyKey, payload);
+```
+
+Повторное событие с тем же `eventType + correlationKey + idempotencyKey` не вставляется в inbox и
+не планирует повторные resume commands. Старый overload без `idempotencyKey` остается
+неидемпотентным.
 
 ## History
 

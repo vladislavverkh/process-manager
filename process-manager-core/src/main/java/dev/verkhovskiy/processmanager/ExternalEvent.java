@@ -5,9 +5,18 @@ import java.util.Map;
 
 /** Внешнее событие, которое возобновляет ожидающий экземпляр процесса. */
 public record ExternalEvent(
-    String eventType, String correlationKey, Map<String, Object> payload, Instant receivedAt) {
+    String eventType,
+    String correlationKey,
+    String idempotencyKey,
+    Map<String, Object> payload,
+    Instant receivedAt) {
 
   public ExternalEvent {
     payload = Map.copyOf(payload == null ? Map.of() : payload);
+  }
+
+  public ExternalEvent(
+      String eventType, String correlationKey, Map<String, Object> payload, Instant receivedAt) {
+    this(eventType, correlationKey, null, payload, receivedAt);
   }
 }

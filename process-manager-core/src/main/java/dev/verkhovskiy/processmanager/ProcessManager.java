@@ -10,6 +10,11 @@ public interface ProcessManager {
 
   void signal(String eventType, String correlationKey, Map<String, Object> payload);
 
+  default void signal(
+      String eventType, String correlationKey, String idempotencyKey, Map<String, Object> payload) {
+    signal(eventType, correlationKey, payload);
+  }
+
   void resume(UUID instanceId);
 
   default void resume(ProcessCommand command) {

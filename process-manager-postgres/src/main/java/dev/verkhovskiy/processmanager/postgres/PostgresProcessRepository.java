@@ -59,6 +59,7 @@ public class PostgresProcessRepository {
               rs.getObject("event_id", UUID.class),
               rs.getString("event_type"),
               rs.getString("correlation_key"),
+              rs.getString("idempotency_key"),
               rs.getString("payload_json"),
               toInstant(rs, "received_at"),
               toInstant(rs, "consumed_at"));
@@ -113,6 +114,94 @@ public class PostgresProcessRepository {
             )
             """,
         instanceParameters(instance));
+  }
+
+  /** Вставляет новый активный экземпляр процесса, если такого business key еще нет. */
+  public boolean insertInstanceIfActiveAbsent(StoredProcessInstance instance) {
+    int inserted =
+        jdbc.update(
+            """
+                insert into pm_process_instance(
+                    instance_id,
+                    process_type,
+                    definition_version,
+                    payload_schema_version,
+                    business_key,
+                    state,
+                    status,
+                    payload_json,
+                    variables_json,
+                    started_at,
+                    updated_at,
+                    process_deadline_at,
+                    state_entered_at,
+                    state_deadline_at,
+                    completed_at,
+                    delete_after,
+                    version
+                )
+                values(
+                    :instanceId,
+                    :processType,
+                    :definitionVersion,
+                    :payloadSchemaVersion,
+                    :businessKey,
+                    :state,
+                    :status,
+                    cast(:payloadJson as jsonb),
+                    cast(:variablesJson as jsonb),
+                    :startedAt,
+                    :updatedAt,
+                    :processDeadlineAt,
+                    :stateEnteredAt,
+                    :stateDeadlineAt,
+                    :completedAt,
+                    :deleteAfter,
+                    :version
+                )
+                on conflict (process_type, business_key)
+                    where status in ('RUNNING', 'WAITING')
+                do nothing
+                """,
+            instanceParameters(instance));
+    return inserted > 0;
+  }
+
+  /** Находит активный экземпляр процесса по бизнесовому ключу. */
+  public Optional<StoredProcessInstance> findActiveInstance(
+      String processType, String businessKey) {
+    List<StoredProcessInstance> rows =
+        jdbc.query(
+            """
+            select instance_id,
+                   process_type,
+                   definition_version,
+                   payload_schema_version,
+                   business_key,
+                   state,
+                   status,
+                   payload_json::text as payload_json,
+                   variables_json::text as variables_json,
+                   started_at,
+                   updated_at,
+                   process_deadline_at,
+                   state_entered_at,
+                   state_deadline_at,
+                   completed_at,
+                   delete_after,
+                   version
+              from pm_process_instance
+             where process_type = :processType
+               and business_key = :businessKey
+               and status in ('RUNNING', 'WAITING')
+             order by started_at, instance_id
+             limit 1
+            """,
+            new MapSqlParameterSource()
+                .addValue("processType", processType)
+                .addValue("businessKey", businessKey),
+            INSTANCE_MAPPER);
+    return rows.stream().findFirst();
   }
 
   /** Находит и блокирует экземпляр процесса для исполнения. */
@@ -302,10 +391,15 @@ public class PostgresProcessRepository {
   }
 
   /** Сохраняет входящее внешнее событие в таблицу входящих событий. */
-  public void insertEvent(
-      UUID eventId, String eventType, String correlationKey, String payloadJson) {
-    jdbc.update(
-        """
+  public boolean insertEvent(
+      UUID eventId,
+      String eventType,
+      String correlationKey,
+      String idempotencyKey,
+      String payloadJson) {
+    int inserted =
+        jdbc.update(
+            """
             with runtime_clock as (
                 select clock_timestamp() as now
             )
@@ -313,6 +407,7 @@ public class PostgresProcessRepository {
                 event_id,
                 event_type,
                 correlation_key,
+                idempotency_key,
                 payload_json,
                 received_at
             )
@@ -320,15 +415,21 @@ public class PostgresProcessRepository {
                 :eventId,
                 :eventType,
                 :correlationKey,
+                :idempotencyKey,
                 cast(:payloadJson as jsonb),
                 runtime_clock.now
               from runtime_clock
+            on conflict (event_type, correlation_key, idempotency_key)
+                where idempotency_key is not null
+            do nothing
             """,
-        new MapSqlParameterSource()
-            .addValue("eventId", eventId)
-            .addValue("eventType", eventType)
-            .addValue("correlationKey", correlationKey)
-            .addValue("payloadJson", payloadJson));
+            new MapSqlParameterSource()
+                .addValue("eventId", eventId)
+                .addValue("eventType", eventType)
+                .addValue("correlationKey", correlationKey)
+                .addValue("idempotencyKey", idempotencyKey)
+                .addValue("payloadJson", payloadJson));
+    return inserted > 0;
   }
 
   /** Находит и блокирует первое необработанное событие, подходящее под точку ожидания. */
@@ -340,6 +441,7 @@ public class PostgresProcessRepository {
             select event_id,
                    event_type,
                    correlation_key,
+                   idempotency_key,
                    payload_json::text as payload_json,
                    received_at,
                    consumed_at

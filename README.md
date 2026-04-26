@@ -24,6 +24,8 @@
 - есть process/state deadlines и watchdog, который планирует timeout-команды только после
   фактического истечения дедлайна;
 - есть структурная валидация process definitions и базовый testkit для проверок графа;
+- есть идемпотентный повторный `start` для активного business key и optional idempotency key для
+  `signal`;
 - payload validation и полноценная retry-модель еще развиваются.
 
 ## Документация

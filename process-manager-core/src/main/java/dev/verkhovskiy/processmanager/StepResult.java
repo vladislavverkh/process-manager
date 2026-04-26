@@ -1,6 +1,7 @@
 package dev.verkhovskiy.processmanager;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /** Результат, который ACTION-состояние возвращает перед выбором перехода. */
@@ -29,6 +30,48 @@ public sealed interface StepResult {
   /** Действие просит среду выполнения ожидать внешнее событие. */
   record AwaitEvent(String eventType, String correlationKey, Duration timeout)
       implements StepResult {}
+
+  /** Результат с явными изменениями variables. */
+  record WithVariables(StepResult delegate, Map<String, Object> variables) implements StepResult {
+    public WithVariables {
+      if (delegate == null) {
+        throw new IllegalArgumentException("delegate must be set");
+      }
+      variables = Map.copyOf(variables == null ? Map.of() : variables);
+    }
+
+    @Override
+    public StepResult baseResult() {
+      return delegate.baseResult();
+    }
+
+    @Override
+    public Map<String, Object> variableUpdates() {
+      Map<String, Object> updates = new LinkedHashMap<>(delegate.variableUpdates());
+      updates.putAll(variables);
+      return Map.copyOf(updates);
+    }
+  }
+
+  /** Возвращает базовый result без decorator-оберток. */
+  default StepResult baseResult() {
+    return this;
+  }
+
+  /** Возвращает явные изменения variables, которые action просит сохранить. */
+  default Map<String, Object> variableUpdates() {
+    return Map.of();
+  }
+
+  /** Возвращает result с дополнительной variable. */
+  default StepResult withVariable(String name, Object value) {
+    return withVariables(Map.of(name, value));
+  }
+
+  /** Возвращает result с дополнительными variables. */
+  default StepResult withVariables(Map<String, Object> variables) {
+    return new WithVariables(this, variables);
+  }
 
   /** Создает успешный результат без дополнительных данных. */
   static Success success(String code) {

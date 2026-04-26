@@ -26,19 +26,20 @@ public record TransitionContext<P>(
   }
 
   public boolean resultCodeEquals(String code) {
-    if (actionResult instanceof StepResult.Success success) {
+    StepResult result = actionResult == null ? null : actionResult.baseResult();
+    if (result instanceof StepResult.Success success) {
       return success.code().equals(code);
     }
-    if (actionResult instanceof StepResult.BusinessFailure failure) {
+    if (result instanceof StepResult.BusinessFailure failure) {
       return failure.code().equals(code);
     }
-    if (actionResult instanceof StepResult.RetryableFailure failure) {
+    if (result instanceof StepResult.RetryableFailure failure) {
       return failure.code().equals(code);
     }
-    if (actionResult instanceof StepResult.FatalFailure failure) {
+    if (result instanceof StepResult.FatalFailure failure) {
       return failure.code().equals(code);
     }
-    if (actionResult instanceof StepResult.AwaitEvent awaitEvent) {
+    if (result instanceof StepResult.AwaitEvent awaitEvent) {
       return awaitEvent.eventType().equals(code);
     }
     return false;

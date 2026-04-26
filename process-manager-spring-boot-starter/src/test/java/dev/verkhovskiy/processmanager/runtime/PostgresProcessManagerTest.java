@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.verkhovskiy.processmanager.ProcessCommand;
 import dev.verkhovskiy.processmanager.ProcessCommandReason;
@@ -17,6 +18,7 @@ import dev.verkhovskiy.processmanager.ProcessDefinition;
 import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
 import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
 import dev.verkhovskiy.processmanager.ProcessRetention;
+import dev.verkhovskiy.processmanager.RetryPolicy;
 import dev.verkhovskiy.processmanager.StepResult;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.postgres.ProcessHistoryRecord;
@@ -48,11 +50,13 @@ class PostgresProcessManagerTest {
 
   @Captor private ArgumentCaptor<ProcessHistoryRecord> historyCaptor;
   @Captor private ArgumentCaptor<StoredProcessWait> waitCaptor;
+  @Captor private ArgumentCaptor<String> variablesCaptor;
 
   private final ObjectMapper objectMapper = new ObjectMapper();
+  private final TypeReference<Map<String, Object>> mapType = new TypeReference<>() {};
 
   @Test
-  void executesActionAndEntersTerminalState() {
+  void executesActionAndEntersTerminalState() throws Exception {
     AtomicReference<PaymentPayload> seenPayload = new AtomicReference<>();
     ProcessDefinition<PaymentPayload> definition =
         ProcessDefinition.builder("payment", PaymentPayload.class)
@@ -65,7 +69,8 @@ class PostgresProcessManagerTest {
                 "SEND",
                 ctx -> {
                   seenPayload.set(ctx.payload());
-                  return StepResult.success("OK", Map.of("providerPaymentId", "provider-1"));
+                  return StepResult.success("OK", Map.of("providerPaymentId", "provider-1"))
+                      .withVariable("operationId", "operation-1");
                 },
                 state -> state.transition("sent", "DONE", ctx -> ctx.resultCodeEquals("OK")))
             .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
@@ -78,7 +83,7 @@ class PostgresProcessManagerTest {
             eq(0L),
             eq("DONE"),
             eq(ProcessInstanceStatus.COMPLETED),
-            eq("{}"),
+            any(),
             any(),
             any()))
         .thenReturn(1);
@@ -93,6 +98,23 @@ class PostgresProcessManagerTest {
     assertThat(history.transitionName()).isEqualTo("sent");
     assertThat(history.triggerType()).isEqualTo("ACTION_RESULT");
     assertThat(history.triggerJson()).contains("\"kind\":\"SUCCESS\"");
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(0L),
+            eq("DONE"),
+            eq(ProcessInstanceStatus.COMPLETED),
+            variablesCaptor.capture(),
+            any(),
+            any());
+    Map<String, Object> variables = jsonMap(variablesCaptor.getValue());
+    assertThat(variables)
+        .containsEntry("providerPaymentId", "provider-1")
+        .containsEntry("operationId", "operation-1");
+    assertThat(nested(variables, "_pm.lastActionResult"))
+        .containsEntry("kind", "SUCCESS")
+        .containsEntry("code", "OK");
+    assertThat(nested(variables, "_pm.lastTrigger")).containsEntry("type", "ACTION_RESULT");
   }
 
   @Test
@@ -127,7 +149,7 @@ class PostgresProcessManagerTest {
             eq(0L),
             eq("WAIT_RESULT"),
             eq(ProcessInstanceStatus.WAITING),
-            eq("{}"),
+            any(),
             eq(null),
             eq(null)))
         .thenReturn(1);
@@ -148,7 +170,7 @@ class PostgresProcessManagerTest {
   }
 
   @Test
-  void resumesWaitingStateFromInboxEvent() {
+  void resumesWaitingStateFromInboxEvent() throws Exception {
     ProcessDefinition<PaymentPayload> definition =
         ProcessDefinition.builder("payment", PaymentPayload.class)
             .version(1)
@@ -182,7 +204,7 @@ class PostgresProcessManagerTest {
             eq(3L),
             eq("DONE"),
             eq(ProcessInstanceStatus.COMPLETED),
-            eq("{}"),
+            any(),
             any(),
             any()))
         .thenReturn(1);
@@ -198,6 +220,141 @@ class PostgresProcessManagerTest {
     assertThat(history.transitionName()).isEqualTo("approved");
     assertThat(history.triggerType()).isEqualTo("EVENT");
     assertThat(history.triggerJson()).contains("\"status\":\"APPROVED\"");
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(3L),
+            eq("DONE"),
+            eq(ProcessInstanceStatus.COMPLETED),
+            variablesCaptor.capture(),
+            any(),
+            any());
+    Map<String, Object> variables = jsonMap(variablesCaptor.getValue());
+    assertThat(nested(variables, "_pm.lastTrigger")).containsEntry("type", "EVENT");
+    assertThat(nested(nested(variables, "_pm.lastEvent"), "payload"))
+        .containsEntry("status", "APPROVED");
+  }
+
+  @Test
+  void decisionCanUseVariablesStoredFromActionResult() throws Exception {
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .version(1)
+            .payloadSchemaVersion(1)
+            .initialState("SEND")
+            .actionState(
+                "SEND",
+                ctx ->
+                    StepResult.success("OK", Map.of("providerPaymentId", "provider-1"))
+                        .withVariable("manualReview", true),
+                state -> state.transition("sent", "DECIDE", ctx -> ctx.resultCodeEquals("OK")))
+            .decisionState(
+                "DECIDE",
+                state ->
+                    state
+                        .transition(
+                            "manual-review",
+                            "REVIEW",
+                            ctx ->
+                                Boolean.TRUE.equals(
+                                        ctx.variables().get("manualReview").orElse(false))
+                                    && ctx.variables()
+                                        .string("providerPaymentId")
+                                        .orElse("")
+                                        .equals("provider-1"))
+                        .otherwise("DONE"))
+            .terminalState("REVIEW", ProcessInstanceStatus.COMPLETED)
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .build();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(Optional.of(instance("SEND", ProcessInstanceStatus.RUNNING, 0)));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID), anyLong(), any(), any(), any(), any(), any()))
+        .thenReturn(1);
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.START, 0));
+
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(0L),
+            eq("DECIDE"),
+            eq(ProcessInstanceStatus.RUNNING),
+            variablesCaptor.capture(),
+            any(),
+            any());
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(1L),
+            eq("REVIEW"),
+            eq(ProcessInstanceStatus.COMPLETED),
+            variablesCaptor.capture(),
+            any(),
+            any());
+    Map<String, Object> variables = jsonMap(variablesCaptor.getAllValues().getLast());
+    assertThat(variables)
+        .containsEntry("providerPaymentId", "provider-1")
+        .containsEntry("manualReview", true);
+  }
+
+  @Test
+  void retryStoresTriggerMetadata() throws Exception {
+    Duration retryDelay = Duration.ofSeconds(1);
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .version(1)
+            .payloadSchemaVersion(1)
+            .initialState("SEND")
+            .actionState(
+                "SEND",
+                ctx -> StepResult.retryableFailure("TEMPORARY_ERROR", "temporary outage"),
+                state ->
+                    state
+                        .retry(RetryPolicy.exponential(2, retryDelay, Duration.ofSeconds(10)))
+                        .otherwise("FAILED"))
+            .terminalState("FAILED", ProcessInstanceStatus.FAILED)
+            .build();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(Optional.of(instance("SEND", ProcessInstanceStatus.RUNNING, 0)));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(0L),
+            eq("SEND"),
+            eq(ProcessInstanceStatus.RUNNING),
+            any(),
+            eq(null),
+            eq(null)))
+        .thenReturn(1);
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.START, 0));
+
+    verify(commandScheduler)
+        .scheduleDelayed(
+            new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RETRY, 1),
+            "payment:payment-1",
+            retryDelay);
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(0L),
+            eq("SEND"),
+            eq(ProcessInstanceStatus.RUNNING),
+            variablesCaptor.capture(),
+            eq(null),
+            eq(null));
+    Map<String, Object> variables = jsonMap(variablesCaptor.getValue());
+    assertThat(nested(variables, "_pm.lastTrigger")).containsEntry("type", "RETRY");
+    assertThat(nested(variables, "_pm.lastRetry"))
+        .containsEntry("attempt", 1)
+        .containsEntry("delay", "PT1S");
+    assertThat(nested(nested(variables, "_pm.lastRetry"), "failure"))
+        .containsEntry("kind", "RETRYABLE_FAILURE")
+        .containsEntry("code", "TEMPORARY_ERROR");
+    verify(processRepository).insertHistory(historyCaptor.capture());
+    assertThat(historyCaptor.getValue().triggerType()).isEqualTo("RETRY");
   }
 
   @Test
@@ -243,6 +400,15 @@ class PostgresProcessManagerTest {
         null,
         null,
         version);
+  }
+
+  private Map<String, Object> jsonMap(String json) throws Exception {
+    return objectMapper.readValue(json, mapType);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> nested(Map<String, Object> values, String key) {
+    return (Map<String, Object>) values.get(key);
   }
 
   private record PaymentPayload(String paymentId) {}

@@ -135,6 +135,23 @@ Action возвращает один из вариантов:
 `StepResult` не должен содержать тяжелый payload процесса. Большие данные должны храниться в
 `payload`/`variables` или внешней системе, а result должен содержать routing data.
 
+`Success.data` и `BusinessFailure.data` runtime сохраняет в `variables_json`, чтобы следующие
+states могли принимать решения по данным предыдущего action. Если action должен явно сохранить
+дополнительные runtime-переменные, можно использовать:
+
+```java
+return StepResult.success("ACCEPTED", Map.of("providerPaymentId", "provider-123"))
+    .withVariable("manualReview", true)
+    .withVariables(Map.of("riskScore", 72));
+```
+
+Runtime также сохраняет служебные variables:
+
+- `_pm.lastActionResult` - последний action result;
+- `_pm.lastEvent` - последнее внешнее событие, если процесс продолжился из WAIT;
+- `_pm.lastRetry` - metadata последнего запланированного retry;
+- `_pm.lastTrigger` - последняя причина продолжения процесса.
+
 ## Registry
 
 В Spring Boot сценарии будут регистрироваться как beans:
@@ -148,4 +165,3 @@ ProcessDefinition<PaymentPayload> paymentProcess() {
 
 `ProcessDefinitionRegistry` хранит несколько версий одного `processType`. Новый instance стартует на
 latest version, а уже созданный instance продолжает работать на своей `definitionVersion`.
-

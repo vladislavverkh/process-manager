@@ -27,7 +27,9 @@ import dev.verkhovskiy.processmanager.postgres.StoredProcessInstance;
 import dev.verkhovskiy.processmanager.postgres.StoredProcessWait;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,6 +42,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class PostgresProcessManager implements ProcessManager {
 
   private static final int MAX_STEPS_PER_RESUME = 100;
+  private static final String LAST_TRIGGER_VARIABLE = "_pm.lastTrigger";
+  private static final String LAST_ACTION_RESULT_VARIABLE = "_pm.lastActionResult";
+  private static final String LAST_EVENT_VARIABLE = "_pm.lastEvent";
+  private static final String LAST_RETRY_VARIABLE = "_pm.lastRetry";
   private static final String RETRY_ATTEMPT_VARIABLE_PREFIX = "_pm.retry.";
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
@@ -176,17 +182,27 @@ public class PostgresProcessManager implements ProcessManager {
           "Action returned null result: " + stateDefinition.name());
     }
 
-    if (result instanceof StepResult.RetryableFailure && canRetry(state, stateDefinition)) {
-      return scheduleRetry(definition, state, stateDefinition, result, now);
+    ProcessVariables variables = applyActionVariables(state, result);
+    ExecutionState<P> actionState = state.withVariables(variables);
+
+    if (result.baseResult() instanceof StepResult.RetryableFailure
+        && canRetry(state, stateDefinition)) {
+      return scheduleRetry(definition, actionState, stateDefinition, result, now);
     }
 
-    ProcessVariables variables = state.variables().without(retryAttemptVariable(state.state()));
+    if (!(result.baseResult() instanceof StepResult.RetryableFailure)) {
+      variables =
+          variables
+              .without(retryAttemptVariable(state.state()))
+              .without(retryMetadataVariable(state.state()));
+      actionState = state.withVariables(variables);
+    }
     TransitionDefinition<P> transition =
         transitionSelector.select(
-            stateDefinition, transitionContext(state.withVariables(variables), result, null, now));
+            stateDefinition, transitionContext(actionState, result, null, now));
     return applyTransition(
         definition,
-        state.withVariables(variables),
+        actionState,
         stateDefinition,
         transition,
         "ACTION_RESULT",
@@ -215,7 +231,15 @@ public class PostgresProcessManager implements ProcessManager {
     }
 
     if (command.reason() == ProcessCommandReason.TIMEOUT) {
-      return advanceFromWait(definition, state, stateDefinition, null, "TIMEOUT", Map.of());
+      Instant now = Instant.now();
+      return advanceFromWait(
+          definition,
+          state,
+          stateDefinition,
+          null,
+          "TIMEOUT",
+          timeoutTrigger(stateDefinition, now),
+          now);
     }
 
     Instant now = Instant.now();
@@ -240,7 +264,8 @@ public class PostgresProcessManager implements ProcessManager {
             stateDefinition,
             externalEvent,
             "EVENT",
-            eventTrigger(externalEvent));
+            eventTrigger(externalEvent),
+            Instant.now());
     if (updated.version() != state.version()) {
       processRepository.markEventConsumed(event.get().eventId());
     }
@@ -253,12 +278,19 @@ public class PostgresProcessManager implements ProcessManager {
       StateDefinition<P> stateDefinition,
       ExternalEvent event,
       String triggerType,
-      Map<String, Object> trigger) {
-    Instant now = Instant.now();
+      Map<String, Object> trigger,
+      Instant now) {
+    ProcessVariables variables =
+        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable(triggerType, trigger));
+    if (event != null) {
+      variables = variables.with(LAST_EVENT_VARIABLE, trigger);
+    }
+    ExecutionState<P> triggeredState = state.withVariables(variables);
     TransitionDefinition<P> transition =
-        transitionSelector.select(stateDefinition, transitionContext(state, null, event, now));
+        transitionSelector.select(
+            stateDefinition, transitionContext(triggeredState, null, event, now));
     return applyTransition(
-        definition, state, stateDefinition, transition, triggerType, trigger, now);
+        definition, triggeredState, stateDefinition, transition, triggerType, trigger, now);
   }
 
   private <P> ExecutionState<P> enterTerminal(
@@ -270,20 +302,25 @@ public class PostgresProcessManager implements ProcessManager {
     }
     Instant now = Instant.now();
     ProcessInstanceStatus terminalStatus = terminalStatus(stateDefinition);
+    ProcessVariables variables =
+        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("START", Map.of()));
     int updated =
         processRepository.updateExecutionState(
             state.instanceId(),
             state.version(),
             stateDefinition.name(),
             terminalStatus,
-            toJson(state.variables().values()),
+            toJson(variables.values()),
             now,
             deleteAfter(definition, terminalStatus, now));
     if (updated == 0) {
       return state.park();
     }
     insertHistory(state, null, stateDefinition.name(), "START", "START", Map.of(), now);
-    return state.withState(stateDefinition.name(), terminalStatus, state.version() + 1).park();
+    return state
+        .withVariables(variables)
+        .withState(stateDefinition.name(), terminalStatus, state.version() + 1)
+        .park();
   }
 
   private <P> ExecutionState<P> applyTransition(
@@ -342,22 +379,31 @@ public class PostgresProcessManager implements ProcessManager {
       String triggerType,
       Map<String, Object> trigger,
       Instant now) {
+    ProcessVariables variables =
+        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable(triggerType, trigger));
+    ExecutionState<P> stateWithTrigger = state.withVariables(variables);
     int updated =
         processRepository.updateExecutionState(
-            state.instanceId(),
-            state.version(),
+            stateWithTrigger.instanceId(),
+            stateWithTrigger.version(),
             stateDefinition.name(),
             ProcessInstanceStatus.WAITING,
-            toJson(state.variables().values()),
+            toJson(stateWithTrigger.variables().values()),
             null,
             null);
     if (updated == 0) {
       return state.park();
     }
     insertHistory(
-        state, null, stateDefinition.name(), stateDefinition.name(), triggerType, trigger, now);
+        stateWithTrigger,
+        null,
+        stateDefinition.name(),
+        stateDefinition.name(),
+        triggerType,
+        trigger,
+        now);
     return registerWait(
-            state.withState(
+            stateWithTrigger.withState(
                 stateDefinition.name(), ProcessInstanceStatus.WAITING, state.version() + 1),
             stateDefinition,
             now)
@@ -396,8 +442,15 @@ public class PostgresProcessManager implements ProcessManager {
       StepResult result,
       Instant now) {
     int nextAttempt = retryAttempt(state, stateDefinition) + 1;
+    Duration delay = stateDefinition.retryPolicy().delayForAttempt(nextAttempt);
+    Map<String, Object> retryMetadata = retryTrigger(stateDefinition, result, nextAttempt, delay);
     ProcessVariables variables =
-        state.variables().with(retryAttemptVariable(stateDefinition.name()), nextAttempt);
+        state
+            .variables()
+            .with(retryAttemptVariable(stateDefinition.name()), nextAttempt)
+            .with(retryMetadataVariable(stateDefinition.name()), retryMetadata)
+            .with(LAST_RETRY_VARIABLE, retryMetadata)
+            .with(LAST_TRIGGER_VARIABLE, triggerVariable("RETRY", retryMetadata));
     int updated =
         processRepository.updateExecutionState(
             state.instanceId(),
@@ -414,7 +467,7 @@ public class PostgresProcessManager implements ProcessManager {
     commandScheduler.scheduleDelayed(
         new ProcessCommand(state.instanceId(), ProcessCommandReason.RETRY, nextVersion),
         partitionKey(definition.processType(), state.businessKey()),
-        stateDefinition.retryPolicy().delayForAttempt(nextAttempt));
+        delay);
     processRepository.insertHistory(
         new ProcessHistoryRecord(
             UUID.randomUUID(),
@@ -423,8 +476,8 @@ public class PostgresProcessManager implements ProcessManager {
             state.state(),
             state.state(),
             "retry",
-            "ACTION_RESULT",
-            toJson(actionTrigger(result)),
+            "RETRY",
+            toJson(retryMetadata),
             now));
     return state.withVariables(variables).withVersion(nextVersion).park();
   }
@@ -439,6 +492,10 @@ public class PostgresProcessManager implements ProcessManager {
 
   private static String retryAttemptVariable(String state) {
     return RETRY_ATTEMPT_VARIABLE_PREFIX + state + ".attempt";
+  }
+
+  private static String retryMetadataVariable(String state) {
+    return RETRY_ATTEMPT_VARIABLE_PREFIX + state;
   }
 
   private <P> ProcessContext<P> processContext(ExecutionState<P> state, Instant now) {
@@ -512,7 +569,7 @@ public class PostgresProcessManager implements ProcessManager {
   }
 
   private static Map<String, Object> actionTrigger(StepResult result) {
-    return switch (result) {
+    return switch (result.baseResult()) {
       case StepResult.Success success ->
           Map.of("kind", "SUCCESS", "code", success.code(), "data", success.data());
       case StepResult.BusinessFailure failure ->
@@ -543,6 +600,28 @@ public class PostgresProcessManager implements ProcessManager {
               awaitEvent.correlationKey(),
               "timeout",
               awaitEvent.timeout() == null ? "" : awaitEvent.timeout().toString());
+      case StepResult.WithVariables withVariables -> actionTrigger(withVariables.delegate());
+    };
+  }
+
+  private static ProcessVariables applyActionVariables(ExecutionState<?> state, StepResult result) {
+    Map<String, Object> actionTrigger = actionTrigger(result);
+    return state
+        .variables()
+        .withAll(actionData(result))
+        .withAll(result.variableUpdates())
+        .with(LAST_ACTION_RESULT_VARIABLE, actionTrigger)
+        .with(LAST_TRIGGER_VARIABLE, triggerVariable("ACTION_RESULT", actionTrigger));
+  }
+
+  private static Map<String, Object> actionData(StepResult result) {
+    return switch (result.baseResult()) {
+      case StepResult.Success success -> success.data();
+      case StepResult.BusinessFailure failure -> failure.data();
+      case StepResult.RetryableFailure failure -> Map.of();
+      case StepResult.FatalFailure failure -> Map.of();
+      case StepResult.AwaitEvent awaitEvent -> Map.of();
+      case StepResult.WithVariables withVariables -> actionData(withVariables.delegate());
     };
   }
 
@@ -556,6 +635,37 @@ public class PostgresProcessManager implements ProcessManager {
         event.payload(),
         "receivedAt",
         event.receivedAt().toString());
+  }
+
+  private static Map<String, Object> timeoutTrigger(
+      StateDefinition<?> stateDefinition, Instant now) {
+    return Map.of(
+        "state",
+        stateDefinition.name(),
+        "eventType",
+        stateDefinition.eventType(),
+        "triggeredAt",
+        now.toString());
+  }
+
+  private static Map<String, Object> retryTrigger(
+      StateDefinition<?> stateDefinition, StepResult result, int nextAttempt, Duration delay) {
+    Map<String, Object> retry = new LinkedHashMap<>();
+    retry.put("state", stateDefinition.name());
+    retry.put("attempt", nextAttempt);
+    retry.put("maxAttempts", stateDefinition.retryPolicy().maxAttempts());
+    retry.put("delay", delay.toString());
+    retry.put("delayMillis", delay.toMillis());
+    retry.put("failure", actionTrigger(result));
+    return Map.copyOf(retry);
+  }
+
+  private static Map<String, Object> triggerVariable(
+      String triggerType, Map<String, Object> trigger) {
+    Map<String, Object> value = new LinkedHashMap<>();
+    value.put("type", triggerType);
+    value.putAll(trigger == null ? Map.of() : trigger);
+    return Map.copyOf(value);
   }
 
   private static String nullToEmpty(String value) {

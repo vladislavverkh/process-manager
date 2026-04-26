@@ -29,6 +29,8 @@
   - resolve definition by `processType + definitionVersion`;
   - deserialize typed payload and variables;
   - execute `ACTION`;
+  - persist action result data and explicit variable updates;
+  - persist last trigger data for action/event/timeout/retry;
   - register `WAIT`;
   - evaluate `DECISION`;
   - enter terminal state;
@@ -47,17 +49,12 @@
    - validation error handling;
    - отделить `payload_schema_version` от `definition_version`.
 
-3. Реализовать variable updates:
-   - action result data -> variables;
-   - explicit API для изменения variables из action;
-   - хранение last trigger data.
-
-4. Реализовать stale command handling:
+3. Реализовать stale command handling:
    - учитывать `expectedVersion`;
    - безопасно пропускать устаревшие retry/timeout/resume commands;
    - добавить метрики.
 
-5. Реализовать wait timeout:
+4. Реализовать wait timeout:
    - сохранять `expires_at`;
    - планировать `TIMEOUT` command;
    - выбирать timeout transition.

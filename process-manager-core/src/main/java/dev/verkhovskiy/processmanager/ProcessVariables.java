@@ -24,6 +24,16 @@ public record ProcessVariables(Map<String, Object> values) {
     return new ProcessVariables(updated);
   }
 
+  /** Возвращает переменные с добавленными или замененными значениями. */
+  public ProcessVariables withAll(Map<String, Object> updates) {
+    if (updates == null || updates.isEmpty()) {
+      return this;
+    }
+    Map<String, Object> updated = new LinkedHashMap<>(values);
+    updated.putAll(updates);
+    return new ProcessVariables(updated);
+  }
+
   /** Возвращает переменные без указанного значения. */
   public ProcessVariables without(String name) {
     if (!values.containsKey(name)) {

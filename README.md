@@ -19,7 +19,9 @@
 - есть Spring Boot autoconfiguration;
 - есть базовый execution loop для `ACTION`, `WAIT`, `DECISION`, terminal states, history и stale
   commands;
-- variable updates, полноценная retry-модель и timeout transition handling еще развиваются.
+- есть сохранение action result data, explicit variable updates и last trigger data в
+  `variables_json`;
+- payload validation, полноценная retry-модель и timeout transition handling еще развиваются.
 
 ## Документация
 

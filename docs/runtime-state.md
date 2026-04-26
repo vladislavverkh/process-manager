@@ -52,6 +52,21 @@ Payload зависит от `processType` и `payloadSchemaVersion`.
 
 Payload отвечает на вопрос "что обрабатываем". Variables отвечают на вопрос "как идет исполнение".
 
+Runtime обновляет variables после исполнения steps:
+
+- `Success.data` и `BusinessFailure.data` из `StepResult` merge'ятся в верхний уровень
+  `variables_json`;
+- `StepResult.withVariable(...)` и `StepResult.withVariables(...)` сохраняют явные изменения
+  variables;
+- `_pm.lastActionResult` хранит последний результат action;
+- `_pm.lastEvent` хранит последнее внешнее событие, которое возобновило WAIT;
+- `_pm.lastRetry` хранит metadata последнего запланированного retry;
+- `_pm.lastTrigger` хранит последнюю причину продолжения процесса: `ACTION_RESULT`, `EVENT`,
+  `TIMEOUT`, `RETRY` или `START`.
+
+Служебный префикс `_pm.` зарезервирован runtime'ом. Пользовательские variables не должны
+использовать этот namespace.
+
 ## Status
 
 | Status | Значение |
@@ -76,8 +91,8 @@ Payload отвечает на вопрос "что обрабатываем". Va
 
 Если command пришел для старой версии instance, runtime должен пропустить его как stale.
 
-Current implementation уже хранит `expectedVersion` в `ProcessCommand`, но full stale-command
-handling еще предстоит реализовать в execution loop.
+Current implementation пропускает команды с несовпадающим `expectedVersion`. Метрики и более
+детальная политика stale commands еще предстоят.
 
 ## Wait points
 
@@ -142,4 +157,3 @@ new ProcessRetention(
 ```
 
 Cleanup удаляет только terminal instances, у которых `delete_after <= db_now`.
-

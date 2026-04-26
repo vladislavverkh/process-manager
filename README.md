@@ -23,6 +23,7 @@
   `variables_json`;
 - есть process/state deadlines и watchdog, который планирует timeout-команды только после
   фактического истечения дедлайна;
+- есть структурная валидация process definitions и базовый testkit для проверок графа;
 - payload validation и полноценная retry-модель еще развиваются.
 
 ## Документация

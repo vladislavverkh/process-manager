@@ -13,6 +13,17 @@
 - [Пример платежного процесса](examples/payment-process.md)
 - [Roadmap](roadmap.md)
 
+## Testkit
+
+Модуль `process-manager-testkit` содержит assertions для проверки process definitions в unit-тестах:
+
+```java
+ProcessDefinitionAssertions.assertThat(payment)
+    .isValid()
+    .hasState("SEND_PAYMENT", StateKind.ACTION)
+    .canReachTerminal("DONE");
+```
+
 ## Что где смотреть
 
 - Общая декомпозиция модулей и ответственность компонентов: [architecture.md](architecture.md)
@@ -28,4 +39,3 @@
 
 Документация должна обновляться в том же pull request/commit, где меняется публичное поведение,
 runtime-семантика, схема БД, настройки или integration contract.
-

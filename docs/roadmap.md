@@ -38,6 +38,12 @@
   - enter terminal state;
   - write history;
   - skip stale commands by `expectedVersion`.
+- Process definition validation:
+  - required ACTION/WAIT/TERMINAL fields;
+  - duplicate transition priorities;
+  - unreachable states;
+  - path from reachable states to terminal states.
+- Basic testkit assertions for process definitions.
 
 ## Ближайший MVP
 
@@ -73,20 +79,13 @@
    - manual retry/cancel;
    - Micrometer metrics.
 
-3. Process definition validation:
-   - unreachable states;
-   - missing terminal states;
-   - duplicate transition priorities;
-   - WAIT state without timeout policy, если timeout обязателен.
-
-4. Retention job:
+3. Retention job:
    - scheduled cleanup terminal instances;
    - cleanup metrics;
    - batch-size property.
 
-5. Testkit:
+4. Testkit:
    - deterministic definition runner без PostgreSQL;
-   - assertions для transition selection;
    - fake command scheduler.
 
 ## Позже

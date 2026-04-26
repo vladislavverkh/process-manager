@@ -128,16 +128,19 @@ public final class ProcessDefinitionBuilder<P> {
   }
 
   public ProcessDefinition<P> build() {
-    return new ProcessDefinition<>(
-        processType,
-        version,
-        payloadSchemaVersion,
-        payloadType,
-        initialState,
-        retention,
-        processTimeout,
-        processTimeoutTargetState,
-        ProcessDefinition.orderedCopy(states));
+    ProcessDefinition<P> definition =
+        new ProcessDefinition<>(
+            processType,
+            version,
+            payloadSchemaVersion,
+            payloadType,
+            initialState,
+            retention,
+            processTimeout,
+            processTimeoutTargetState,
+            ProcessDefinition.orderedCopy(states));
+    ProcessDefinitionValidator.validateOrThrow(definition);
+    return definition;
   }
 
   private void add(StateDefinition<P> state) {

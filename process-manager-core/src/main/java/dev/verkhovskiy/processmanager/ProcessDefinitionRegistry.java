@@ -15,6 +15,7 @@ public class ProcessDefinitionRegistry {
   }
 
   public void register(ProcessDefinition<?> definition) {
+    ProcessDefinitionValidator.validateOrThrow(definition);
     DefinitionKey key = new DefinitionKey(definition.processType(), definition.version());
     if (definitions.putIfAbsent(key, definition) != null) {
       throw new ProcessDefinitionException(

@@ -14,10 +14,10 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
-/** PostgreSQL repository for process instances, waits, inbox and history. */
+/** PostgreSQL-репозиторий для экземпляров процессов, ожиданий, входящих событий и истории. */
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
-    justification = "NamedParameterJdbcTemplate is an injected infrastructure bean.")
+    justification = "NamedParameterJdbcTemplate является внедренным инфраструктурным Spring-бином.")
 public class PostgresProcessRepository {
 
   private static final RowMapper<StoredProcessInstance> INSTANCE_MAPPER =
@@ -50,13 +50,23 @@ public class PostgresProcessRepository {
               toInstant(rs, "expires_at"),
               toInstant(rs, "created_at"));
 
+  private static final RowMapper<StoredProcessEvent> EVENT_MAPPER =
+      (rs, rowNum) ->
+          new StoredProcessEvent(
+              rs.getObject("event_id", UUID.class),
+              rs.getString("event_type"),
+              rs.getString("correlation_key"),
+              rs.getString("payload_json"),
+              toInstant(rs, "received_at"),
+              toInstant(rs, "consumed_at"));
+
   private final NamedParameterJdbcTemplate jdbc;
 
   public PostgresProcessRepository(NamedParameterJdbcTemplate jdbc) {
     this.jdbc = jdbc;
   }
 
-  /** Inserts a new process instance. */
+  /** Вставляет новый экземпляр процесса. */
   public void insertInstance(StoredProcessInstance instance) {
     jdbc.update(
         """
@@ -96,7 +106,7 @@ public class PostgresProcessRepository {
         instanceParameters(instance));
   }
 
-  /** Finds and locks a process instance for execution. */
+  /** Находит и блокирует экземпляр процесса для исполнения. */
   public Optional<StoredProcessInstance> findInstanceForUpdate(UUID instanceId) {
     List<StoredProcessInstance> rows =
         jdbc.query(
@@ -124,7 +134,7 @@ public class PostgresProcessRepository {
     return rows.stream().findFirst();
   }
 
-  /** Updates state, status and variables after a transition. */
+  /** Обновляет состояние, статус и переменные после перехода. */
   public int updateExecutionState(
       UUID instanceId,
       long expectedVersion,
@@ -160,7 +170,7 @@ public class PostgresProcessRepository {
             .addValue("deleteAfter", toOffsetDateTime(deleteAfter)));
   }
 
-  /** Registers or replaces a wait point for an external event. */
+  /** Регистрирует или заменяет точку ожидания внешнего события. */
   public void upsertWait(StoredProcessWait wait) {
     jdbc.update(
         """
@@ -200,7 +210,7 @@ public class PostgresProcessRepository {
             .addValue("createdAt", toOffsetDateTime(wait.createdAt())));
   }
 
-  /** Finds process waits matching an external event. */
+  /** Находит ожидания процесса, подходящие под внешнее событие. */
   public List<StoredProcessWait> findWaits(String eventType, String correlationKey) {
     return jdbc.query(
         """
@@ -223,14 +233,14 @@ public class PostgresProcessRepository {
         WAIT_MAPPER);
   }
 
-  /** Deletes all waits for an instance. */
+  /** Удаляет все ожидания для экземпляра процесса. */
   public int deleteWaits(UUID instanceId) {
     return jdbc.update(
         "delete from pm_process_wait where instance_id = :instanceId",
         new MapSqlParameterSource("instanceId", instanceId));
   }
 
-  /** Stores an incoming external event in the inbox. */
+  /** Сохраняет входящее внешнее событие в таблицу входящих событий. */
   public void insertEvent(
       UUID eventId, String eventType, String correlationKey, String payloadJson) {
     jdbc.update(
@@ -260,7 +270,50 @@ public class PostgresProcessRepository {
             .addValue("payloadJson", payloadJson));
   }
 
-  /** Inserts a history record. */
+  /** Находит и блокирует первое необработанное событие, подходящее под точку ожидания. */
+  public Optional<StoredProcessEvent> findUnconsumedEventForUpdate(
+      String eventType, String correlationKey) {
+    List<StoredProcessEvent> rows =
+        jdbc.query(
+            """
+            select event_id,
+                   event_type,
+                   correlation_key,
+                   payload_json::text as payload_json,
+                   received_at,
+                   consumed_at
+              from pm_process_event_inbox
+             where event_type = :eventType
+               and correlation_key = :correlationKey
+               and consumed_at is null
+             order by received_at, event_id
+             limit 1
+             for update skip locked
+            """,
+            new MapSqlParameterSource()
+                .addValue("eventType", eventType)
+                .addValue("correlationKey", correlationKey),
+            EVENT_MAPPER);
+    return rows.stream().findFirst();
+  }
+
+  /** Помечает входящее событие как обработанное. */
+  public int markEventConsumed(UUID eventId) {
+    return jdbc.update(
+        """
+            with runtime_clock as (
+                select clock_timestamp() as now
+            )
+            update pm_process_event_inbox
+               set consumed_at = runtime_clock.now
+              from runtime_clock
+             where event_id = :eventId
+               and consumed_at is null
+            """,
+        new MapSqlParameterSource("eventId", eventId));
+  }
+
+  /** Вставляет запись истории. */
   public void insertHistory(ProcessHistoryRecord history) {
     jdbc.update(
         """
@@ -299,7 +352,7 @@ public class PostgresProcessRepository {
             .addValue("createdAt", toOffsetDateTime(history.createdAt())));
   }
 
-  /** Deletes terminal process instances whose retention period expired. */
+  /** Удаляет финальные экземпляры процессов с истекшим сроком хранения. */
   public int deleteExpiredTerminalInstances(int limit) {
     return jdbc.update(
         """

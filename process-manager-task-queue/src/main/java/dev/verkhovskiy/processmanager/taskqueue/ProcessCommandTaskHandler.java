@@ -7,10 +7,11 @@ import dev.verkhovskiy.taskqueue.domain.QueuedTask;
 import dev.verkhovskiy.taskqueue.handler.TaskHandler;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
-/** Task queue handler that resumes a process instance. */
+/** Обработчик очереди задач, который возобновляет экземпляр процесса. */
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
-    justification = "ProcessManager and ObjectMapper are injected infrastructure beans.")
+    justification =
+        "ProcessManager и ObjectMapper являются внедренными инфраструктурными Spring-бинами.")
 public class ProcessCommandTaskHandler implements TaskHandler {
 
   private final ProcessManager processManager;
@@ -29,6 +30,6 @@ public class ProcessCommandTaskHandler implements TaskHandler {
   @Override
   public void handle(QueuedTask task) throws Exception {
     ProcessCommand command = objectMapper.readValue(task.payload(), ProcessCommand.class);
-    processManager.resume(command.instanceId());
+    processManager.resume(command);
   }
 }

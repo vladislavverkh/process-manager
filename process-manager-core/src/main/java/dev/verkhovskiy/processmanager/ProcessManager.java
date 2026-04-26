@@ -3,7 +3,7 @@ package dev.verkhovskiy.processmanager;
 import java.util.Map;
 import java.util.UUID;
 
-/** Public API for starting and resuming process instances. */
+/** Публичный API для старта и возобновления экземпляров процессов. */
 public interface ProcessManager {
 
   UUID start(String processType, String businessKey, Object payload);
@@ -11,4 +11,8 @@ public interface ProcessManager {
   void signal(String eventType, String correlationKey, Map<String, Object> payload);
 
   void resume(UUID instanceId);
+
+  default void resume(ProcessCommand command) {
+    resume(command.instanceId());
+  }
 }

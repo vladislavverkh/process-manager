@@ -1,20 +1,55 @@
 # process-manager
 
-Durable process orchestration library for business scenarios with conditional transitions,
-retry, external events and PostgreSQL-backed state.
+`process-manager` - библиотека для durable-оркестрации бизнес-процессов: платежи,
+закрытие договоров, возвраты, заявки и другие сценарии, где есть состояния, условные
+переходы, retry, ожидание внешних событий и возобновление процесса после ответа из Kafka
+или другого канала.
 
-## Modules
+Библиотека проектируется как state-machine/process-orchestrator поверх PostgreSQL. Для
+асинхронного исполнения и отложенного resume используется `task-queue-postgres`.
 
-- `process-manager-core` - process model, DSL and runtime contracts.
-- `process-manager-postgres` - PostgreSQL storage for instances, waits, inbox and history.
-- `process-manager-task-queue` - adapter that schedules process resume commands through
-  `task-queue-postgres`.
+## Статус проекта
+
+Проект находится на ранней стадии:
+
+- есть Gradle multi-module skeleton;
+- есть core-модель definition/state/transition/retry/retention;
+- есть PostgreSQL schema и repository для instance/wait/inbox/history;
+- есть task-queue adapter для durable process commands;
+- есть Spring Boot autoconfiguration;
+- полноценный execution loop для `ACTION`, `WAIT`, `DECISION` еще предстоит реализовать.
+
+## Документация
+
+- [Общий индекс документации](docs/process-manager-library.md)
+- [Архитектура](docs/architecture.md)
+- [Модель процесса и DSL](docs/process-definition.md)
+- [Runtime и состояние процесса](docs/runtime-state.md)
+- [PostgreSQL storage](docs/postgres-storage.md)
+- [Интеграция с task-queue-postgres](docs/task-queue-integration.md)
+- [Spring Boot starter](docs/spring-boot.md)
+- [Пример платежного процесса](docs/examples/payment-process.md)
+- [Roadmap](docs/roadmap.md)
+
+## Модули
+
+- `process-manager-core` - модель процесса, DSL и runtime contracts.
+- `process-manager-postgres` - PostgreSQL-хранилище instance, wait, inbox и history.
+- `process-manager-task-queue` - adapter к `task-queue-postgres`.
 - `process-manager-spring-boot-starter` - Spring Boot autoconfiguration.
-- `process-manager-testkit` - testing helpers for process definitions.
+- `process-manager-testkit` - test helpers для process definitions.
 
-The project uses `task-queue-postgres` as a composite build:
+## Локальная сборка
+
+Проект использует `task-queue-postgres` как composite build:
 
 ```kotlin
 includeBuild("../task-queue-postgres")
+```
+
+Проверка:
+
+```bash
+./gradlew check
 ```
 

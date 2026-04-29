@@ -35,7 +35,8 @@ public class ProcessOperatorController {
   }
 
   @GetMapping("/{instanceId}")
-  public ResponseEntity<ProcessDetailsView> findDetails(@PathVariable UUID instanceId) {
+  public ResponseEntity<ProcessDetailsView> findDetails(
+      @PathVariable("instanceId") UUID instanceId) {
     return ResponseEntity.of(processInspector.findDetails(instanceId));
   }
 
@@ -61,20 +62,23 @@ public class ProcessOperatorController {
 
   @PostMapping("/{instanceId}/cancel")
   public ResponseEntity<ProcessOperationResponse> cancel(
-      @PathVariable UUID instanceId, @RequestBody(required = false) CancelProcessRequest request) {
+      @PathVariable("instanceId") UUID instanceId,
+      @RequestBody(required = false) CancelProcessRequest request) {
     boolean accepted =
         processOperator.cancel(instanceId, request == null ? null : request.reason());
     return operationResponse(instanceId, accepted, HttpStatus.OK);
   }
 
   @PostMapping("/{instanceId}/resume")
-  public ResponseEntity<ProcessOperationResponse> scheduleResume(@PathVariable UUID instanceId) {
+  public ResponseEntity<ProcessOperationResponse> scheduleResume(
+      @PathVariable("instanceId") UUID instanceId) {
     return operationResponse(
         instanceId, processOperator.scheduleResume(instanceId), HttpStatus.ACCEPTED);
   }
 
   @PostMapping("/{instanceId}/retry")
-  public ResponseEntity<ProcessOperationResponse> scheduleRetry(@PathVariable UUID instanceId) {
+  public ResponseEntity<ProcessOperationResponse> scheduleRetry(
+      @PathVariable("instanceId") UUID instanceId) {
     return operationResponse(
         instanceId, processOperator.scheduleRetry(instanceId), HttpStatus.ACCEPTED);
   }

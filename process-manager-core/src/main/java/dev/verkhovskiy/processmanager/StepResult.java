@@ -1,6 +1,5 @@
 package dev.verkhovskiy.processmanager;
 
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -26,10 +25,6 @@ public sealed interface StepResult {
 
   /** Техническая ошибка, которую нельзя повторить. */
   record FatalFailure(String code, String message) implements StepResult {}
-
-  /** Действие просит среду выполнения ожидать внешнее событие. */
-  record AwaitEvent(String eventType, String correlationKey, Duration timeout)
-      implements StepResult {}
 
   /** Результат с явными изменениями variables. */
   record WithVariables(StepResult delegate, Map<String, Object> variables) implements StepResult {
@@ -96,10 +91,5 @@ public sealed interface StepResult {
   /** Создает фатальную техническую ошибку. */
   static FatalFailure fatalFailure(String code, String message) {
     return new FatalFailure(code, message);
-  }
-
-  /** Создает результат ожидания внешнего события. */
-  static AwaitEvent awaitEvent(String eventType, String correlationKey, Duration timeout) {
-    return new AwaitEvent(eventType, correlationKey, timeout);
   }
 }

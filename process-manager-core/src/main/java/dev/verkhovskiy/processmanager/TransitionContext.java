@@ -39,9 +39,6 @@ public record TransitionContext<P>(
     if (result instanceof StepResult.FatalFailure failure) {
       return failure.code().equals(code);
     }
-    if (result instanceof StepResult.AwaitEvent awaitEvent) {
-      return awaitEvent.eventType().equals(code);
-    }
     return false;
   }
 

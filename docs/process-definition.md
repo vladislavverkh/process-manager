@@ -193,10 +193,12 @@ Action возвращает один из вариантов:
 | `BusinessFailure(code, data)` | Контролируемый бизнес-отказ |
 | `RetryableFailure(code, message)` | Техническая ошибка, которую можно повторить |
 | `FatalFailure(code, message)` | Техническая ошибка без retry |
-| `AwaitEvent(eventType, correlationKey, timeout)` | Action просит runtime перейти в ожидание события |
 
 `StepResult` не должен содержать тяжелый payload процесса. Большие данные должны храниться в
 `payload`/`variables` или внешней системе, а result должен содержать routing data.
+
+Если процесс должен ожидать внешнее событие, описывайте это явным `WAIT` state. Dynamic wait через
+result из `ACTION` не является частью runtime-модели.
 
 `Success.data` и `BusinessFailure.data` runtime сохраняет в `variables_json`, чтобы следующие
 states могли принимать решения по данным предыдущего action. Если action должен явно сохранить

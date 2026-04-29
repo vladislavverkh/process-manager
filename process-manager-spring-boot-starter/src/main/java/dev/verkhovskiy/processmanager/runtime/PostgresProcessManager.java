@@ -718,16 +718,6 @@ public class PostgresProcessManager implements ProcessManager {
               failure.code(),
               "message",
               nullToEmpty(failure.message()));
-      case StepResult.AwaitEvent awaitEvent ->
-          Map.of(
-              "kind",
-              "AWAIT_EVENT",
-              "eventType",
-              awaitEvent.eventType(),
-              "correlationKey",
-              awaitEvent.correlationKey(),
-              "timeout",
-              awaitEvent.timeout() == null ? "" : awaitEvent.timeout().toString());
       case StepResult.WithVariables withVariables -> actionTrigger(withVariables.delegate());
     };
   }
@@ -748,7 +738,6 @@ public class PostgresProcessManager implements ProcessManager {
       case StepResult.BusinessFailure failure -> failure.data();
       case StepResult.RetryableFailure failure -> Map.of();
       case StepResult.FatalFailure failure -> Map.of();
-      case StepResult.AwaitEvent awaitEvent -> Map.of();
       case StepResult.WithVariables withVariables -> actionData(withVariables.delegate());
     };
   }

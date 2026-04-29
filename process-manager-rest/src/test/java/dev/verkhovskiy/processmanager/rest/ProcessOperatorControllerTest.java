@@ -2,13 +2,11 @@ package dev.verkhovskiy.processmanager.rest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.verkhovskiy.processmanager.ProcessDetailsView;
 import dev.verkhovskiy.processmanager.ProcessHistoryView;
 import dev.verkhovskiy.processmanager.ProcessInspector;
-import dev.verkhovskiy.processmanager.ProcessInstanceQuery;
 import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
 import dev.verkhovskiy.processmanager.ProcessInstanceView;
 import dev.verkhovskiy.processmanager.ProcessOperator;
@@ -18,10 +16,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -54,34 +50,6 @@ class ProcessOperatorControllerTest {
     ResponseEntity<ProcessDetailsView> response = controller.findDetails(INSTANCE_ID);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-  }
-
-  @Test
-  void findInstancesBuildsQueryFromRequestParameters() {
-    Instant deadline = Instant.parse("2026-04-26T10:00:00Z");
-    when(processInspector.findInstances(org.mockito.ArgumentMatchers.any()))
-        .thenReturn(List.of(instanceView()));
-
-    List<ProcessInstanceView> result =
-        controller.findInstances(
-            "payment",
-            "payment-1",
-            "WAIT_RESULT",
-            Set.of(ProcessInstanceStatus.WAITING),
-            deadline,
-            25);
-
-    assertThat(result).containsExactly(instanceView());
-    ArgumentCaptor<ProcessInstanceQuery> queryCaptor =
-        ArgumentCaptor.forClass(ProcessInstanceQuery.class);
-    verify(processInspector).findInstances(queryCaptor.capture());
-    ProcessInstanceQuery query = queryCaptor.getValue();
-    assertThat(query.processType()).isEqualTo("payment");
-    assertThat(query.businessKey()).isEqualTo("payment-1");
-    assertThat(query.state()).isEqualTo("WAIT_RESULT");
-    assertThat(query.statuses()).containsExactly(ProcessInstanceStatus.WAITING);
-    assertThat(query.deadlineAtOrBefore()).isEqualTo(deadline);
-    assertThat(query.limit()).isEqualTo(25);
   }
 
   @Test

@@ -36,25 +36,6 @@ GET /process-manager/processes/{instanceId}
 Ответ `200` содержит `ProcessDetailsView`: instance, wait points и history. Если процесса нет,
 возвращается `404`.
 
-### List
-
-```http
-GET /process-manager/processes?processType=payment&status=WAITING&limit=100
-```
-
-Query parameters:
-
-| Parameter | Назначение |
-| --- | --- |
-| `processType` | Фильтр по типу процесса |
-| `businessKey` | Фильтр по business key |
-| `state` | Фильтр по текущему state |
-| `status` | Один или несколько статусов |
-| `deadlineAtOrBefore` | Process/state deadline не позднее ISO-8601 instant |
-| `limit` | Максимальное число строк |
-
-Ответ `200` содержит список `ProcessInstanceView`.
-
 ### Cancel
 
 ```http

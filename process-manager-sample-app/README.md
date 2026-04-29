@@ -136,9 +136,3 @@ curl -X POST http://localhost:8080/sample/transactions/tx-temp-client/retry \
 ```bash
 curl 'http://localhost:8080/sample/transactions'
 ```
-
-Operator API библиотеки:
-
-```bash
-curl 'http://localhost:8080/process-manager/processes?processType=sample-transaction'
-```

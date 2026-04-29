@@ -3,7 +3,14 @@
 Минимальное Spring Boot приложение, которое использует `process-manager` для обработки
 транзакции.
 
-Сценарий `sample-transaction`:
+В примере есть два сценария обработки:
+
+- `sample-transaction-polling` - после `202 Accepted` процесс сам периодически опрашивает stub-сервис
+  проводок через `TIMER`;
+- `sample-transaction-event` - после отправки команды процесс ждет внешнее событие, как будто ответ
+  пришел из парного Kafka topic.
+
+Общие шаги:
 
 1. Проверить, что тип транзакции поддерживается.
 2. Найти клиента во внешней системе.
@@ -11,7 +18,7 @@
 4. Создать внутренние действия по транзакции.
 5. Найти макет будущей бухгалтерской проводки и подобрать счета дебета/кредита.
 6. Отправить команду на формирование проводки.
-7. Дождаться результата из парного Kafka topic через `signal(...)`.
+7. Дождаться финального результата через polling или внешнее событие.
 
 Внешние REST/Kafka системы в примере заменены in-memory stubs, чтобы приложение запускалось без
 дополнительных сервисов кроме PostgreSQL.
@@ -59,9 +66,9 @@ OpenAPI JSON:
 http://localhost:8080/v3/api-docs
 ```
 
-## Happy Path
+## Happy Path: Polling
 
-Создать транзакцию:
+`completionMode` можно не передавать: по умолчанию используется `POLLING`.
 
 ```bash
 curl -X POST http://localhost:8080/sample/transactions \
@@ -70,14 +77,34 @@ curl -X POST http://localhost:8080/sample/transactions \
     "transactionId": "tx-1",
     "transactionDate": "2026-04-29",
     "contractNumber": "CONTRACT-1",
-    "transactionType": "ACCRUAL"
+    "transactionType": "ACCRUAL",
+    "completionMode": "POLLING"
+  }'
+```
+
+После отправки команды процесс перейдет в `WAIT_NEXT_POSTING_POLL`, а затем будет выполнять
+`POLL_POSTING_RESULT` через timer state до финального ответа stub-сервиса проводок.
+
+## Happy Path: Event From Kafka
+
+Создать транзакцию в event-based сценарии:
+
+```bash
+curl -X POST http://localhost:8080/sample/transactions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "transactionId": "tx-event-1",
+    "transactionDate": "2026-04-29",
+    "contractNumber": "CONTRACT-1",
+    "transactionType": "ACCRUAL",
+    "completionMode": "EVENT"
   }'
 ```
 
 Передать результат формирования проводки, как будто он пришел из парного Kafka topic:
 
 ```bash
-curl -X POST http://localhost:8080/sample/transactions/tx-1/posting-result \
+curl -X POST http://localhost:8080/sample/transactions/tx-event-1/posting-result \
   -H 'Content-Type: application/json' \
   -d '{
     "posted": true,
@@ -106,6 +133,7 @@ Business failures от внешних систем можно проверить
 - `NO-CLIENT-1` - клиент не найден;
 - `NO-CONTRACT-1` - договор не найден;
 - `NO-TEMPLATE-1` - макет проводки не найден.
+- `POSTING-REJECT-1` - polling-сервис проводок вернет финальный бизнесовый отказ.
 
 ## Temporary Error And Park
 

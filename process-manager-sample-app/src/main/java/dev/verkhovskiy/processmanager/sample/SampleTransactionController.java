@@ -49,14 +49,13 @@ public class SampleTransactionController {
             request.transactionDate(),
             request.contractNumber(),
             request.transactionType());
-    UUID instanceId =
-        processManager.start(
-            TransactionProcessConfiguration.PROCESS_TYPE, request.transactionId(), payload);
-    return new CreateTransactionResponse(instanceId, request.transactionId());
+    String processType = processType(request);
+    UUID instanceId = processManager.start(processType, request.transactionId(), payload);
+    return new CreateTransactionResponse(instanceId, request.transactionId(), processType);
   }
 
   @PostMapping("/{transactionId}/posting-result")
-  @Operation(summary = "Передать результат формирования проводки")
+  @Operation(summary = "Передать результат формирования проводки для event-based сценария")
   public void postingResult(
       @PathVariable String transactionId, @RequestBody PostingResultRequest request) {
     processManager.signal(
@@ -89,11 +88,7 @@ public class SampleTransactionController {
   @GetMapping
   @Operation(summary = "Список процессов обработки транзакций")
   public List<ProcessInstanceView> list() {
-    return processInspector.findInstances(
-        ProcessInstanceQuery.builder()
-            .processType(TransactionProcessConfiguration.PROCESS_TYPE)
-            .limit(100)
-            .build());
+    return processInspector.findInstances(ProcessInstanceQuery.builder().limit(100).build());
   }
 
   @GetMapping("/{transactionId}/actions")
@@ -106,6 +101,14 @@ public class SampleTransactionController {
   @Operation(summary = "Детали процесса обработки транзакции")
   public ResponseEntity<ProcessDetailsView> details(@PathVariable UUID instanceId) {
     return ResponseEntity.of(processInspector.findDetails(instanceId));
+  }
+
+  private static String processType(CreateTransactionRequest request) {
+    if ("EVENT".equalsIgnoreCase(request.completionMode())
+        || "KAFKA".equalsIgnoreCase(request.completionMode())) {
+      return TransactionProcessConfiguration.EVENT_PROCESS_TYPE;
+    }
+    return TransactionProcessConfiguration.POLLING_PROCESS_TYPE;
   }
 
   private static String nullToEmpty(String value) {

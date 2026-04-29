@@ -1,6 +1,7 @@
 package dev.verkhovskiy.processmanager.sample;
 
 import dev.verkhovskiy.processmanager.ProcessDefinition;
+import dev.verkhovskiy.processmanager.ProcessDefinitionBuilder;
 import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
 import dev.verkhovskiy.processmanager.RetryPolicy;
 import java.time.Duration;
@@ -10,7 +11,9 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 public class TransactionProcessConfiguration {
 
-  static final String PROCESS_TYPE = "sample-transaction";
+  static final String PROCESS_TYPE = "sample-transaction-polling";
+  static final String POLLING_PROCESS_TYPE = PROCESS_TYPE;
+  static final String EVENT_PROCESS_TYPE = "sample-transaction-event";
   static final String EVENT_POSTING_RESULT = "sample-transaction.posting-result";
   static final String EVENT_RETRY_PARKED = "sample-transaction.retry-parked";
 
@@ -18,10 +21,100 @@ public class TransactionProcessConfiguration {
       RetryPolicy.exponential(3, Duration.ofSeconds(1), Duration.ofSeconds(10));
 
   @Bean
-  ProcessDefinition<TransactionPayload> sampleTransactionProcess(
+  ProcessDefinition<TransactionPayload> sampleTransactionPollingProcess(
       TransactionProcessingActions actions) {
-    return ProcessDefinition.builder(PROCESS_TYPE, TransactionPayload.class)
-        .version(1)
+    return withTerminalStates(
+            baseDefinition(POLLING_PROCESS_TYPE, 2, actions)
+                .actionState(
+                    "SEND_POSTING_COMMAND",
+                    state ->
+                        state
+                            .action(actions::sendPostingCommand)
+                            .transition(
+                                transition ->
+                                    transition
+                                        .name("posting-command-sent")
+                                        .targetState("WAIT_NEXT_POSTING_POLL")
+                                        .condition(
+                                            ctx -> ctx.resultCodeEquals("POSTING_COMMAND_SENT")))
+                            .otherwise("TECHNICAL_FAILURE"))
+                .timerState(
+                    "WAIT_NEXT_POSTING_POLL",
+                    state -> state.delay(Duration.ofSeconds(5)).targetState("POLL_POSTING_RESULT"))
+                .actionState(
+                    "POLL_POSTING_RESULT",
+                    state ->
+                        state
+                            .action(actions::pollPostingResult)
+                            .transition(
+                                transition ->
+                                    transition
+                                        .name("posting-created")
+                                        .targetState("PROCESSED")
+                                        .condition(
+                                            ctx -> ctx.resultCodeEquals("POSTING_COMPLETED")))
+                            .transition(
+                                transition ->
+                                    transition
+                                        .name("posting-pending")
+                                        .targetState("WAIT_NEXT_POSTING_POLL")
+                                        .condition(ctx -> ctx.resultCodeEquals("POSTING_PENDING")))
+                            .transition(
+                                transition ->
+                                    transition
+                                        .name("posting-rejected")
+                                        .targetState("BUSINESS_ERROR")
+                                        .condition(ctx -> ctx.resultCodeEquals("POSTING_REJECTED")))
+                            .otherwise("TECHNICAL_FAILURE")))
+        .build();
+  }
+
+  @Bean
+  ProcessDefinition<TransactionPayload> sampleTransactionEventProcess(
+      TransactionProcessingActions actions) {
+    return withTerminalStates(
+            baseDefinition(EVENT_PROCESS_TYPE, 1, actions)
+                .actionState(
+                    "SEND_POSTING_COMMAND",
+                    state ->
+                        state
+                            .action(actions::sendPostingCommand)
+                            .transition(
+                                transition ->
+                                    transition
+                                        .name("posting-command-sent")
+                                        .targetState("WAIT_POSTING_RESULT")
+                                        .condition(
+                                            ctx -> ctx.resultCodeEquals("POSTING_COMMAND_SENT")))
+                            .otherwise("TECHNICAL_FAILURE"))
+                .waitState(
+                    "WAIT_POSTING_RESULT",
+                    state ->
+                        state
+                            .eventType(EVENT_POSTING_RESULT)
+                            .correlationKey(ctx -> ctx.payload().transactionId())
+                            .waitTimeout(Duration.ofHours(1))
+                            .transition(
+                                transition ->
+                                    transition
+                                        .name("posting-created")
+                                        .targetState("PROCESSED")
+                                        .condition(ctx -> ctx.eventFieldEquals("posted", true)))
+                            .transition(
+                                transition ->
+                                    transition
+                                        .name("posting-rejected")
+                                        .targetState("BUSINESS_ERROR")
+                                        .condition(ctx -> ctx.eventFieldEquals("posted", false)))
+                            .timeoutTransition("TECHNICAL_FAILURE")
+                            .otherwise("BUSINESS_ERROR")))
+        .build();
+  }
+
+  private static ProcessDefinitionBuilder<TransactionPayload> baseDefinition(
+      String processType, int version, TransactionProcessingActions actions) {
+    return ProcessDefinition.builder(processType, TransactionPayload.class)
+        .version(version)
         .payloadSchemaVersion(1)
         .initialState("VALIDATE_TRANSACTION_TYPE")
         .processTimeout(
@@ -142,40 +235,12 @@ public class TransactionProcessConfiguration {
                                 .targetState("BUSINESS_ERROR")
                                 .condition(
                                     ctx -> ctx.resultCodeEquals("POSTING_TEMPLATE_NOT_FOUND")))
-                    .otherwise("TECHNICAL_FAILURE"))
-        .actionState(
-            "SEND_POSTING_COMMAND",
-            state ->
-                state
-                    .action(actions::sendPostingCommand)
-                    .transition(
-                        transition ->
-                            transition
-                                .name("posting-command-sent")
-                                .targetState("WAIT_POSTING_RESULT")
-                                .condition(ctx -> ctx.resultCodeEquals("POSTING_COMMAND_SENT")))
-                    .otherwise("TECHNICAL_FAILURE"))
-        .waitState(
-            "WAIT_POSTING_RESULT",
-            state ->
-                state
-                    .eventType(EVENT_POSTING_RESULT)
-                    .correlationKey(ctx -> ctx.payload().transactionId())
-                    .waitTimeout(Duration.ofHours(1))
-                    .transition(
-                        transition ->
-                            transition
-                                .name("posting-created")
-                                .targetState("PROCESSED")
-                                .condition(ctx -> ctx.eventFieldEquals("posted", true)))
-                    .transition(
-                        transition ->
-                            transition
-                                .name("posting-rejected")
-                                .targetState("BUSINESS_ERROR")
-                                .condition(ctx -> ctx.eventFieldEquals("posted", false)))
-                    .timeoutTransition("TECHNICAL_FAILURE")
-                    .otherwise("BUSINESS_ERROR"))
+                    .otherwise("TECHNICAL_FAILURE"));
+  }
+
+  private static ProcessDefinitionBuilder<TransactionPayload> withTerminalStates(
+      ProcessDefinitionBuilder<TransactionPayload> builder) {
+    return builder
         .waitState(
             "PARKED_TEMPORARY_FAILURE",
             state ->
@@ -191,7 +256,6 @@ public class TransactionProcessConfiguration {
                     .otherwise("TECHNICAL_FAILURE"))
         .terminalState("PROCESSED", ProcessInstanceStatus.COMPLETED)
         .terminalState("BUSINESS_ERROR", ProcessInstanceStatus.FAILED)
-        .terminalState("TECHNICAL_FAILURE", ProcessInstanceStatus.FAILED)
-        .build();
+        .terminalState("TECHNICAL_FAILURE", ProcessInstanceStatus.FAILED);
   }
 }

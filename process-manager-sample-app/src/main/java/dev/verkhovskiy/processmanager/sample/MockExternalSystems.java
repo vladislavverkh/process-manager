@@ -15,6 +15,7 @@ public class MockExternalSystems {
       Set.of("ACCRUAL", "PAYMENT", "REVERSAL");
 
   private final ConcurrentMap<String, Integer> transientFailures = new ConcurrentHashMap<>();
+  private final ConcurrentMap<String, PostingCommand> postingCommands = new ConcurrentHashMap<>();
 
   public boolean supportsTransactionType(String transactionType) {
     return transactionType != null
@@ -68,7 +69,25 @@ public class MockExternalSystems {
   }
 
   public String sendPostingCommand(TransactionPayload payload, List<Map<String, Object>> entries) {
-    return "posting-command-" + payload.transactionId() + "-" + entries.size();
+    String commandId = "posting-command-" + payload.transactionId() + "-" + entries.size();
+    boolean reject = payload.contractNumber().startsWith("POSTING-REJECT");
+    postingCommands.putIfAbsent(commandId, new PostingCommand(commandId, reject));
+    return commandId;
+  }
+
+  public PostingCommandResult pollPostingCommand(String commandId) {
+    PostingCommand command = postingCommands.get(commandId);
+    if (command == null) {
+      return PostingCommandResult.rejected("POSTING_COMMAND_NOT_FOUND");
+    }
+    int poll = transientFailures.merge("posting:" + commandId, 1, Integer::sum);
+    if (poll < 3) {
+      return PostingCommandResult.pending();
+    }
+    if (command.reject()) {
+      return PostingCommandResult.rejected("POSTING_REJECTED_BY_ACCOUNTING");
+    }
+    return PostingCommandResult.completed("posting-" + commandId);
   }
 
   private boolean shouldFailTemporarily(String key, int failuresBeforeSuccess) {
@@ -147,6 +166,22 @@ public class MockExternalSystems {
 
     boolean temporaryError() {
       return code.endsWith("TEMPORARY_UNAVAILABLE");
+    }
+  }
+
+  private record PostingCommand(String commandId, boolean reject) {}
+
+  public record PostingCommandResult(String code, String postingId, String errorCode) {
+    static PostingCommandResult pending() {
+      return new PostingCommandResult("POSTING_PENDING", "", "");
+    }
+
+    static PostingCommandResult completed(String postingId) {
+      return new PostingCommandResult("POSTING_COMPLETED", postingId, "");
+    }
+
+    static PostingCommandResult rejected(String errorCode) {
+      return new PostingCommandResult("POSTING_REJECTED", "", errorCode);
     }
   }
 }

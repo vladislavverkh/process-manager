@@ -97,6 +97,23 @@ public class TransactionProcessingActions {
     return StepResult.success("POSTING_COMMAND_SENT", Map.of("postingCommandId", commandId));
   }
 
+  public StepResult pollPostingResult(ProcessContext<TransactionPayload> context) {
+    Object commandId = context.variables().values().get("postingCommandId");
+    if (commandId == null || commandId.toString().isBlank()) {
+      return StepResult.fatalFailure("NO_POSTING_COMMAND_ID", "Posting command id is missing");
+    }
+    MockExternalSystems.PostingCommandResult result =
+        externalSystems.pollPostingCommand(commandId.toString());
+    return switch (result.code()) {
+      case "POSTING_COMPLETED" ->
+          StepResult.success("POSTING_COMPLETED", Map.of("postingId", result.postingId()));
+      case "POSTING_PENDING" -> StepResult.success("POSTING_PENDING");
+      case "POSTING_REJECTED" ->
+          StepResult.businessFailure("POSTING_REJECTED", Map.of("errorCode", result.errorCode()));
+      default -> StepResult.fatalFailure(result.code(), "Unexpected posting command status");
+    };
+  }
+
   private static List<TransactionAction> createTransactionActions(TransactionPayload payload) {
     String contractNumber = payload.contractNumber();
     return switch (payload.transactionType().toUpperCase(Locale.ROOT)) {

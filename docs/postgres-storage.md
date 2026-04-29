@@ -1,9 +1,9 @@
 # PostgreSQL storage
 
-`process-manager-postgres` хранит durable state процесса. Миграция находится в:
+`process-manager-postgres` хранит durable state процесса. Liquibase changelog находится в:
 
 ```text
-process-manager-postgres/src/main/resources/db/migration/V1__process_manager.sql
+process-manager-postgres/src/main/resources/db/changelog/process-manager.postgres.sql
 ```
 
 ## Таблицы

@@ -1,3 +1,6 @@
+--liquibase formatted sql
+
+--changeset process-manager:001-create-process-manager-schema
 create table if not exists pm_process_instance (
     instance_id uuid primary key,
     process_type varchar(128) not null,

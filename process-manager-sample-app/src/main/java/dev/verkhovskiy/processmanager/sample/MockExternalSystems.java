@@ -1,6 +1,5 @@
 package dev.verkhovskiy.processmanager.sample;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -50,34 +49,8 @@ public class MockExternalSystems {
     return LookupResult.success("contract-" + key);
   }
 
-  public List<Map<String, Object>> createTransactionActions(TransactionPayload payload) {
-    String contractNumber = payload.contractNumber();
-    String transactionId = payload.transactionId();
-    String date = payload.transactionDate().toString();
-    return switch (payload.transactionType().toUpperCase(Locale.ROOT)) {
-      case "ACCRUAL" ->
-          List.of(
-              action(transactionId, date, "ACCRUE_PRINCIPAL", contractNumber, "1000.00", "LOAN"),
-              action(transactionId, date, "ACCRUE_FEE", contractNumber, "50.00", "FEE"));
-      case "PAYMENT" ->
-          List.of(
-              action(transactionId, date, "REPAY_PRINCIPAL", contractNumber, "1000.00", "CURRENT"),
-              action(transactionId, date, "REPAY_FEE", contractNumber, "50.00", "CURRENT"));
-      case "REVERSAL" ->
-          List.of(
-              action(
-                  transactionId,
-                  date,
-                  "REVERSE_TRANSACTION",
-                  contractNumber,
-                  "1050.00",
-                  "REVERSAL"));
-      default -> List.of();
-    };
-  }
-
   public PostingLayoutResult resolvePostingLayout(
-      TransactionPayload payload, List<Map<String, Object>> actions) {
+      TransactionPayload payload, List<TransactionAction> actions) {
     String key = payload.contractNumber();
     if (key.startsWith("NO-TEMPLATE")) {
       return PostingLayoutResult.businessError(
@@ -103,37 +76,13 @@ public class MockExternalSystems {
     return attempt <= failuresBeforeSuccess;
   }
 
-  private static Map<String, Object> action(
-      String transactionId,
-      String actionDate,
-      String actionType,
-      String contractNumber,
-      String amount,
-      String accountType) {
-    return Map.of(
-        "actionId",
-        actionType + "-" + transactionId,
-        "actionDate",
-        actionDate,
-        "actionType",
-        actionType,
-        "contractNumber",
-        contractNumber,
-        "amount",
-        new BigDecimal(amount),
-        "accountType",
-        accountType,
-        "transactionId",
-        transactionId);
-  }
-
   private static Map<String, Object> postingEntry(
-      TransactionPayload payload, Map<String, Object> action) {
-    String actionType = action.get("actionType").toString();
-    String accountType = action.get("accountType").toString();
+      TransactionPayload payload, TransactionAction action) {
+    String actionType = action.actionType();
+    String accountType = action.accountType();
     return Map.of(
         "actionId",
-        action.get("actionId"),
+        action.actionId(),
         "templateId",
         "template-" + actionType,
         "debitAccount",
@@ -141,7 +90,7 @@ public class MockExternalSystems {
         "creditAccount",
         creditAccount(accountType, payload.transactionType()),
         "amount",
-        action.get("amount"));
+        action.amount());
   }
 
   private static String debitAccount(String accountType, String transactionType) {

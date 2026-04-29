@@ -2,17 +2,26 @@ package dev.verkhovskiy.processmanager.sample;
 
 import dev.verkhovskiy.processmanager.ProcessContext;
 import dev.verkhovskiy.processmanager.StepResult;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
+@SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "Зависимости являются внедренными инфраструктурными Spring-бинами.")
 public class TransactionProcessingActions {
 
   private final MockExternalSystems externalSystems;
+  private final TransactionActionRepository actionRepository;
 
-  public TransactionProcessingActions(MockExternalSystems externalSystems) {
+  public TransactionProcessingActions(
+      MockExternalSystems externalSystems, TransactionActionRepository actionRepository) {
     this.externalSystems = externalSystems;
+    this.actionRepository = actionRepository;
   }
 
   public StepResult validateTransactionType(ProcessContext<TransactionPayload> context) {
@@ -49,16 +58,22 @@ public class TransactionProcessingActions {
   }
 
   public StepResult buildTransactionActions(ProcessContext<TransactionPayload> context) {
-    List<Map<String, Object>> actions = externalSystems.createTransactionActions(context.payload());
+    List<TransactionAction> actions = createTransactionActions(context.payload());
     if (actions.isEmpty()) {
       return StepResult.fatalFailure(
           "NO_TRANSACTION_ACTIONS", "No actions were created for transaction");
     }
-    return StepResult.success("ACTIONS_CREATED", Map.of("transactionActions", actions));
+    actionRepository.replaceByTransactionId(context.payload().transactionId(), actions);
+    return StepResult.success("ACTIONS_CREATED", Map.of("actionCount", actions.size()));
   }
 
   public StepResult preparePostingLayout(ProcessContext<TransactionPayload> context) {
-    List<Map<String, Object>> actions = transactionActions(context);
+    List<TransactionAction> actions =
+        actionRepository.findByTransactionId(context.payload().transactionId());
+    if (actions.isEmpty()) {
+      return StepResult.fatalFailure(
+          "NO_TRANSACTION_ACTIONS", "No actions were found for transaction");
+    }
     MockExternalSystems.PostingLayoutResult result =
         externalSystems.resolvePostingLayout(context.payload(), actions);
     if (result.success()) {
@@ -82,14 +97,37 @@ public class TransactionProcessingActions {
     return StepResult.success("POSTING_COMMAND_SENT", Map.of("postingCommandId", commandId));
   }
 
-  @SuppressWarnings("unchecked")
-  private static List<Map<String, Object>> transactionActions(
-      ProcessContext<TransactionPayload> context) {
-    Object value = context.variables().values().get("transactionActions");
-    if (value instanceof List<?> list) {
-      return (List<Map<String, Object>>) list;
-    }
-    return List.of();
+  private static List<TransactionAction> createTransactionActions(TransactionPayload payload) {
+    String contractNumber = payload.contractNumber();
+    return switch (payload.transactionType().toUpperCase(Locale.ROOT)) {
+      case "ACCRUAL" ->
+          List.of(
+              action(payload, "ACCRUE_PRINCIPAL", contractNumber, "1000.00", "LOAN"),
+              action(payload, "ACCRUE_FEE", contractNumber, "50.00", "FEE"));
+      case "PAYMENT" ->
+          List.of(
+              action(payload, "REPAY_PRINCIPAL", contractNumber, "1000.00", "CURRENT"),
+              action(payload, "REPAY_FEE", contractNumber, "50.00", "CURRENT"));
+      case "REVERSAL" ->
+          List.of(action(payload, "REVERSE_TRANSACTION", contractNumber, "1050.00", "REVERSAL"));
+      default -> List.of();
+    };
+  }
+
+  private static TransactionAction action(
+      TransactionPayload payload,
+      String actionType,
+      String contractNumber,
+      String amount,
+      String accountType) {
+    return new TransactionAction(
+        actionType + "-" + payload.transactionId(),
+        payload.transactionDate(),
+        actionType,
+        contractNumber,
+        new BigDecimal(amount),
+        accountType,
+        payload.transactionId());
   }
 
   @SuppressWarnings("unchecked")

@@ -5,6 +5,7 @@ import dev.verkhovskiy.processmanager.ProcessInspector;
 import dev.verkhovskiy.processmanager.ProcessInstanceQuery;
 import dev.verkhovskiy.processmanager.ProcessInstanceView;
 import dev.verkhovskiy.processmanager.ProcessManager;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
@@ -21,15 +22,22 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/sample/transactions")
 @Tag(name = "Sample transactions", description = "Пример процесса обработки транзакции")
+@SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "Зависимости являются внедренными инфраструктурными Spring-бинами.")
 public class SampleTransactionController {
 
   private final ProcessManager processManager;
   private final ProcessInspector processInspector;
+  private final TransactionActionRepository actionRepository;
 
   public SampleTransactionController(
-      ProcessManager processManager, ProcessInspector processInspector) {
+      ProcessManager processManager,
+      ProcessInspector processInspector,
+      TransactionActionRepository actionRepository) {
     this.processManager = processManager;
     this.processInspector = processInspector;
+    this.actionRepository = actionRepository;
   }
 
   @PostMapping
@@ -86,6 +94,12 @@ public class SampleTransactionController {
             .processType(TransactionProcessConfiguration.PROCESS_TYPE)
             .limit(100)
             .build());
+  }
+
+  @GetMapping("/{transactionId}/actions")
+  @Operation(summary = "Список бизнесовых действий по транзакции")
+  public List<TransactionAction> actions(@PathVariable String transactionId) {
+    return actionRepository.findByTransactionId(transactionId);
   }
 
   @GetMapping("/{instanceId}")

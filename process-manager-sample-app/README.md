@@ -16,6 +16,10 @@
 Внешние REST/Kafka системы в примере заменены in-memory stubs, чтобы приложение запускалось без
 дополнительных сервисов кроме PostgreSQL.
 
+Действия по транзакции - это бизнесовые данные sample app. Они хранятся отдельно от process-manager
+state в таблице `sample_transaction_action` и создаются внутренним шагом
+`BUILD_TRANSACTION_ACTIONS`.
+
 ## Запуск PostgreSQL
 
 ```bash
@@ -38,8 +42,10 @@ docker compose -f process-manager-sample-app/docker-compose.yml up -d
 ./gradlew :process-manager-sample-app:bootRun
 ```
 
-При старте приложение накатывает Liquibase changelog из `process-manager-postgres`:
-`classpath:db/changelog/process-manager.postgres.sql`.
+При старте приложение накатывает два Liquibase changelog:
+
+- `classpath:db/changelog/process-manager.postgres.sql` - runtime tables библиотеки;
+- `classpath:db/changelog/sample-app.postgres.sql` - бизнесовые таблицы sample app.
 
 Swagger UI:
 
@@ -135,4 +141,10 @@ curl -X POST http://localhost:8080/sample/transactions/tx-temp-client/retry \
 
 ```bash
 curl 'http://localhost:8080/sample/transactions'
+```
+
+Список бизнесовых действий по транзакции:
+
+```bash
+curl 'http://localhost:8080/sample/transactions/tx-1/actions'
 ```

@@ -12,9 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** Сканирует истекшие дедлайны процессов и планирует команды таймаута. */
 @SuppressFBWarnings(
-    value = "EI_EXPOSE_REP2",
-    justification = "Зависимости являются внедренными инфраструктурными Spring-бинами.")
-public final class ProcessDeadlineWatchdog {
+    value = {"EI_EXPOSE_REP2", "CT_CONSTRUCTOR_THROW"},
+    justification =
+        "Зависимости являются внедренными инфраструктурными Spring-бинами; класс не final, чтобы Spring мог создать transactional proxy.")
+public class ProcessDeadlineWatchdog {
 
   private final PostgresProcessRepository processRepository;
   private final ProcessCommandScheduler commandScheduler;

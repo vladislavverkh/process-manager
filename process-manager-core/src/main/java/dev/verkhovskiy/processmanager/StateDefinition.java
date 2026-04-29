@@ -30,9 +30,6 @@ public record StateDefinition<P>(
     if (timeoutTargetState != null && timeoutTargetState.isBlank()) {
       throw new IllegalArgumentException("timeoutTargetState must not be blank");
     }
-    if (timeoutTargetState != null && stateTimeout == null && waitTimeout == null) {
-      throw new IllegalArgumentException("timeoutTargetState requires stateTimeout or waitTimeout");
-    }
     retryPolicy = retryPolicy == null ? RetryPolicy.none() : retryPolicy;
     transitions = List.copyOf(transitions == null ? List.of() : transitions);
   }

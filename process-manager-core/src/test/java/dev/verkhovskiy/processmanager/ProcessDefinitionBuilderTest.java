@@ -30,8 +30,11 @@ class ProcessDefinitionBuilderTest {
                             transition ->
                                 transition
                                     .name("accepted")
-                                    .targetState("WAIT_RESULT")
+                                    .targetState("WAIT_BEFORE_RESULT_POLL")
                                     .condition(ctx -> ctx.resultCodeEquals("ACCEPTED"))))
+            .timerState(
+                "WAIT_BEFORE_RESULT_POLL",
+                state -> state.delay(Duration.ofSeconds(30)).targetState("WAIT_RESULT"))
             .waitState(
                 "WAIT_RESULT",
                 state ->
@@ -54,6 +57,11 @@ class ProcessDefinitionBuilderTest {
     assertThat(definition.processTimeoutTargetState()).isEqualTo("TECHNICAL_FAILURE");
     assertThat(definition.state("SEND").stateTimeout()).isEqualTo(Duration.ofMinutes(10));
     assertThat(definition.state("SEND").timeoutTargetState()).isEqualTo("TECHNICAL_FAILURE");
+    assertThat(definition.state("WAIT_BEFORE_RESULT_POLL").kind()).isEqualTo(StateKind.TIMER);
+    assertThat(definition.state("WAIT_BEFORE_RESULT_POLL").stateTimeout())
+        .isEqualTo(Duration.ofSeconds(30));
+    assertThat(definition.state("WAIT_BEFORE_RESULT_POLL").timeoutTargetState())
+        .isEqualTo("WAIT_RESULT");
     assertThat(definition.state("WAIT_RESULT").eventType()).isEqualTo("payment.result");
     assertThat(definition.state("WAIT_RESULT").waitTimeout()).isEqualTo(Duration.ofHours(1));
     assertThat(definition.state("WAIT_RESULT").timeoutTargetState()).isEqualTo("TECHNICAL_FAILURE");

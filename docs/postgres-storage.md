@@ -27,7 +27,7 @@ process-manager-postgres/src/main/resources/db/changelog/process-manager.postgre
 | `updated_at` | Последнее обновление |
 | `process_deadline_at` | Общий дедлайн процесса |
 | `state_entered_at` | Время входа в текущее state |
-| `state_deadline_at` | Дедлайн текущего state или WAIT |
+| `state_deadline_at` | Дедлайн текущего state, WAIT или TIMER |
 | `completed_at` | Время входа в terminal status |
 | `delete_after` | Момент, после которого instance можно удалить |
 | `version` | Optimistic version |
@@ -38,7 +38,7 @@ process-manager-postgres/src/main/resources/db/changelog/process-manager.postgre
 - `(status, delete_after)` для cleanup;
 - `(process_type, state, status)` для диагностики и будущего admin API.
 - `(process_deadline_at, instance_id)` для watchdog общего дедлайна;
-- `(state_deadline_at, instance_id)` для watchdog state/WAIT дедлайна.
+- `(state_deadline_at, instance_id)` для watchdog state/WAIT/TIMER дедлайна.
 
 ### pm_process_wait
 

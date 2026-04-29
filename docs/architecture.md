@@ -78,7 +78,7 @@ idempotencyKey` не создает новую inbox-запись и не пла
 4. Runtime locks the instance, checks command version, evaluates current state and executes the next
    transition.
 
-Current implementation handles ACTION, WAIT, DECISION and TERMINAL states in the PostgreSQL-backed
+Current implementation handles ACTION, WAIT, TIMER, DECISION and TERMINAL states in the PostgreSQL-backed
 runtime. Retry routing exists for retryable failures; timeout routing is driven by stored deadlines
 and `ProcessDeadlineWatchdog`.
 

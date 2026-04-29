@@ -77,10 +77,12 @@ public final class ProcessDefinitionValidator {
     switch (state.kind()) {
       case ACTION -> validateActionState(stateName, state, problems);
       case WAIT -> validateWaitState(stateName, state, problems);
+      case TIMER -> validateTimerState(stateName, state, problems);
       case DECISION -> validateDecisionState(stateName, state, problems);
       case TERMINAL -> validateTerminalState(stateName, state, problems);
     }
     validateTransitions(definition, stateName, state, problems);
+    validateTimeoutTargetHasTimeout(stateName, state, problems);
   }
 
   private static void validateActionState(
@@ -115,6 +117,32 @@ public final class ProcessDefinitionValidator {
               "WAIT_WITH_ACTION", stateName, "WAIT state must not define action"));
     }
     validateNonTerminalState(stateName, state, problems);
+    validateNoTerminalStatus(stateName, state, problems);
+  }
+
+  private static void validateTimerState(
+      String stateName, StateDefinition<?> state, List<ProcessDefinitionProblem> problems) {
+    if (state.stateTimeout() == null) {
+      problems.add(
+          ProcessDefinitionProblem.state(
+              "TIMER_WITHOUT_DELAY", stateName, "TIMER state must define delay"));
+    }
+    if (state.timeoutTargetState() == null || state.timeoutTargetState().isBlank()) {
+      problems.add(
+          ProcessDefinitionProblem.state(
+              "TIMER_WITHOUT_TARGET", stateName, "TIMER state must define targetState"));
+    }
+    if (!state.transitions().isEmpty()) {
+      problems.add(
+          ProcessDefinitionProblem.state(
+              "TIMER_WITH_TRANSITIONS", stateName, "TIMER state must not define transitions"));
+    }
+    if (state.action() != null) {
+      problems.add(
+          ProcessDefinitionProblem.state(
+              "TIMER_WITH_ACTION", stateName, "TIMER state must not define action"));
+    }
+    validateNoWaitFields(stateName, state, problems);
     validateNoTerminalStatus(stateName, state, problems);
   }
 
@@ -194,6 +222,20 @@ public final class ProcessDefinitionValidator {
               "NON_TERMINAL_WITH_STATUS",
               stateName,
               state.kind() + " state must not define terminal status"));
+    }
+  }
+
+  private static void validateTimeoutTargetHasTimeout(
+      String stateName, StateDefinition<?> state, List<ProcessDefinitionProblem> problems) {
+    if (state.kind() != StateKind.TIMER
+        && state.timeoutTargetState() != null
+        && state.stateTimeout() == null
+        && state.waitTimeout() == null) {
+      problems.add(
+          ProcessDefinitionProblem.state(
+              "TIMEOUT_TARGET_WITHOUT_TIMEOUT",
+              stateName,
+              state.kind() + " state timeout target requires stateTimeout or waitTimeout"));
     }
   }
 

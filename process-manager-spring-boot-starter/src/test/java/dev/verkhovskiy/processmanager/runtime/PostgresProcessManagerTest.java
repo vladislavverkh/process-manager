@@ -267,6 +267,114 @@ class PostgresProcessManagerTest {
   }
 
   @Test
+  void enteringTimerStateSchedulesDelayedResume() {
+    Duration delay = Duration.ofSeconds(30);
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .version(1)
+            .payloadSchemaVersion(1)
+            .initialState("SEND")
+            .actionState(
+                "SEND",
+                state ->
+                    state
+                        .action(ctx -> StepResult.success("ACCEPTED"))
+                        .transition(
+                            transition ->
+                                transition
+                                    .name("accepted")
+                                    .targetState("WAIT_BEFORE_POLL")
+                                    .condition(ctx -> ctx.resultCodeEquals("ACCEPTED"))))
+            .timerState("WAIT_BEFORE_POLL", state -> state.delay(delay).targetState("POLL_RESULT"))
+            .actionState(
+                "POLL_RESULT",
+                state ->
+                    state
+                        .action(ctx -> StepResult.success("OK"))
+                        .transition(
+                            transition ->
+                                transition.name("done").targetState("DONE").condition(ctx -> true)))
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .build();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(Optional.of(instance("SEND", ProcessInstanceStatus.RUNNING, 0)));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(0L),
+            eq("WAIT_BEFORE_POLL"),
+            eq(ProcessInstanceStatus.WAITING),
+            any(),
+            any(),
+            notNull(),
+            isNull(),
+            isNull()))
+        .thenReturn(1);
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.START, 0));
+
+    verify(commandScheduler)
+        .scheduleDelayed(commandCaptor.capture(), eq("payment:payment-1"), eq(delay));
+    assertThat(commandCaptor.getValue())
+        .isEqualTo(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RESUME, 1));
+    verify(processRepository, never()).upsertWait(any());
+  }
+
+  @Test
+  void expiredTimerTransitionsToTargetState() {
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .version(1)
+            .payloadSchemaVersion(1)
+            .initialState("WAIT_BEFORE_POLL")
+            .timerState(
+                "WAIT_BEFORE_POLL",
+                state -> state.delay(Duration.ofSeconds(30)).targetState("POLL_RESULT"))
+            .actionState(
+                "POLL_RESULT",
+                state ->
+                    state
+                        .action(ctx -> StepResult.success("OK"))
+                        .transition(
+                            transition ->
+                                transition.name("done").targetState("DONE").condition(ctx -> true)))
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .build();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(
+            Optional.of(
+                instance(
+                    "WAIT_BEFORE_POLL",
+                    ProcessInstanceStatus.WAITING,
+                    3,
+                    null,
+                    Instant.parse("2026-04-26T10:00:00Z"),
+                    Instant.parse("2026-04-26T10:00:01Z"))));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(3L),
+            eq("POLL_RESULT"),
+            eq(ProcessInstanceStatus.RUNNING),
+            any(),
+            any(),
+            isNull(),
+            isNull(),
+            isNull()))
+        .thenReturn(1);
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RESUME, 3));
+
+    verify(processRepository).insertHistory(historyCaptor.capture());
+    ProcessHistoryRecord history = historyCaptor.getValue();
+    assertThat(history.fromState()).isEqualTo("WAIT_BEFORE_POLL");
+    assertThat(history.toState()).isEqualTo("POLL_RESULT");
+    assertThat(history.transitionName()).isEqualTo("timer-fired");
+    assertThat(history.triggerType()).isEqualTo("TIMER");
+    assertThat(history.triggerJson()).contains("\"targetState\":\"POLL_RESULT\"");
+  }
+
+  @Test
   void resumesWaitingStateFromInboxEvent() throws Exception {
     ProcessDefinition<PaymentPayload> definition =
         ProcessDefinition.builder("payment", PaymentPayload.class)

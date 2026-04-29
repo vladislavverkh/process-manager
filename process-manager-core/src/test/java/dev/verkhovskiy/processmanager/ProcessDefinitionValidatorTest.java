@@ -3,6 +3,7 @@ package dev.verkhovskiy.processmanager;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -129,6 +130,38 @@ class ProcessDefinitionValidatorTest {
                     .build())
         .isInstanceOf(ProcessDefinitionException.class)
         .hasMessageContaining("NO_TERMINAL_PATH[LOOP]");
+  }
+
+  @Test
+  void rejectsTimerWithoutDelay() {
+    assertThatThrownBy(
+            () ->
+                ProcessDefinition.builder("payment", PaymentPayload.class)
+                    .initialState("WAIT_BEFORE_POLL")
+                    .timerState("WAIT_BEFORE_POLL", state -> state.targetState("DONE"))
+                    .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+                    .build())
+        .isInstanceOf(ProcessDefinitionException.class)
+        .hasMessageContaining("TIMER_WITHOUT_DELAY[WAIT_BEFORE_POLL]");
+  }
+
+  @Test
+  void rejectsTimerWithTransitions() {
+    assertThatThrownBy(
+            () ->
+                ProcessDefinition.builder("payment", PaymentPayload.class)
+                    .initialState("WAIT_BEFORE_POLL")
+                    .timerState(
+                        "WAIT_BEFORE_POLL",
+                        state ->
+                            state
+                                .delay(Duration.ofSeconds(30))
+                                .targetState("DONE")
+                                .otherwise("DONE"))
+                    .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+                    .build())
+        .isInstanceOf(ProcessDefinitionException.class)
+        .hasMessageContaining("TIMER_WITH_TRANSITIONS[WAIT_BEFORE_POLL]");
   }
 
   private static StateDefinition<PaymentPayload> terminal(String name) {

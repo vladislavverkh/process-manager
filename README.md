@@ -19,7 +19,7 @@ Kafka, scheduler в другой БД или собственный executor.
 - есть PostgreSQL schema и repository для instance/wait/inbox/history;
 - есть опциональные adapter-классы для ручной интеграции с `task-queue-postgres`;
 - есть Spring Boot autoconfiguration;
-- есть базовый execution loop для `ACTION`, `WAIT`, `DECISION`, terminal states, history и stale
+- есть базовый execution loop для `ACTION`, `WAIT`, `TIMER`, `DECISION`, terminal states, history и stale
   commands;
 - есть сохранение action result data, explicit variable updates и last trigger data в
   `variables_json`;

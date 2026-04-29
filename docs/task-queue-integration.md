@@ -86,7 +86,7 @@ Queue payload содержит только technical command:
 | `RESUME` | Возобновление после external event |
 | `RETRY` | Повтор action после retryable failure |
 | `PROCESS_TIMEOUT` | Продолжение после истечения общего дедлайна процесса |
-| `STATE_TIMEOUT` | Продолжение после истечения дедлайна текущего state или WAIT |
+| `STATE_TIMEOUT` | Продолжение после истечения дедлайна текущего state, WAIT или TIMER |
 | `TIMEOUT` | Legacy alias для `STATE_TIMEOUT` |
 
 ## Partition key
@@ -123,6 +123,10 @@ Task queue считает delay от времени PostgreSQL через `enque
 Timeout-команды не планируются заранее для каждого state. Runtime сохраняет `process_deadline_at` и
 `state_deadline_at` в `pm_process_instance`, а `ProcessDeadlineWatchdog` сканирует уже истекшие
 дедлайны батчем и ставит в очередь только фактически нужные команды.
+
+TIMER state использует ту же `scheduleDelayed(command, partitionKey, delay)` абстракцию, что и retry:
+при входе в TIMER runtime планирует delayed `RESUME`, а `state_deadline_at` остается дополнительной
+защитой для watchdog.
 
 Типичный запуск в приложении:
 

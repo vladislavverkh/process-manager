@@ -207,6 +207,7 @@ public class PostgresProcessManager implements ProcessManager {
             case ACTION -> executeAction(definition, state, stateDefinition);
             case DECISION -> executeDecision(definition, state, stateDefinition);
             case WAIT -> executeWait(definition, state, stateDefinition);
+            case TIMER -> executeTimer(definition, state, stateDefinition);
             case TERMINAL -> enterTerminal(definition, state, stateDefinition);
           };
       if (state.parked()) {
@@ -315,6 +316,16 @@ public class PostgresProcessManager implements ProcessManager {
     return updated;
   }
 
+  private <P> ExecutionState<P> executeTimer(
+      ProcessDefinition<P> definition,
+      ExecutionState<P> state,
+      StateDefinition<P> stateDefinition) {
+    if (state.status() != ProcessInstanceStatus.WAITING) {
+      return parkInTimer(definition, state, stateDefinition, "START", Map.of(), Instant.now());
+    }
+    return state.park();
+  }
+
   private <P> ExecutionState<P> advanceFromWait(
       ProcessDefinition<P> definition,
       ExecutionState<P> state,
@@ -374,6 +385,9 @@ public class PostgresProcessManager implements ProcessManager {
     Map<String, Object> trigger =
         stateTimeoutTrigger(stateDefinition, state.stateDeadlineAt(), now);
     if (stateDefinition.timeoutTargetState() != null) {
+      if (stateDefinition.kind() == StateKind.TIMER) {
+        return fireTimer(definition, state, stateDefinition, now);
+      }
       return applyTransition(
           definition,
           state.withVariables(
@@ -391,6 +405,23 @@ public class PostgresProcessManager implements ProcessManager {
           definition, state, stateDefinition, null, "STATE_TIMEOUT", trigger, now);
     }
     return state.park();
+  }
+
+  private <P> ExecutionState<P> fireTimer(
+      ProcessDefinition<P> definition,
+      ExecutionState<P> state,
+      StateDefinition<P> stateDefinition,
+      Instant now) {
+    Map<String, Object> trigger = timerTrigger(stateDefinition, state.stateDeadlineAt(), now);
+    return applyTransition(
+        definition,
+        state.withVariables(
+            state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("TIMER", trigger))),
+        stateDefinition,
+        timeoutTransition("timer-fired", stateDefinition.timeoutTargetState()),
+        "TIMER",
+        trigger,
+        now);
   }
 
   private <P> ExecutionState<P> enterTerminal(
@@ -474,6 +505,9 @@ public class PostgresProcessManager implements ProcessManager {
     if (targetState.kind() == StateKind.WAIT) {
       return registerWait(updatedState, targetState, now).park();
     }
+    if (targetState.kind() == StateKind.TIMER) {
+      return scheduleTimer(definition, updatedState, targetState, now).park();
+    }
     if (targetState.kind() == StateKind.TERMINAL) {
       return updatedState.park();
     }
@@ -521,6 +555,76 @@ public class PostgresProcessManager implements ProcessManager {
             stateDefinition,
             now)
         .park();
+  }
+
+  private <P> ExecutionState<P> parkInTimer(
+      ProcessDefinition<P> definition,
+      ExecutionState<P> state,
+      StateDefinition<P> stateDefinition,
+      String triggerType,
+      Map<String, Object> trigger,
+      Instant now) {
+    ProcessVariables variables =
+        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable(triggerType, trigger));
+    ExecutionState<P> stateWithTrigger = state.withVariables(variables);
+    Instant stateDeadlineAt = stateDeadlineAt(stateDefinition, now);
+    int updated =
+        processRepository.updateExecutionState(
+            stateWithTrigger.instanceId(),
+            stateWithTrigger.version(),
+            stateDefinition.name(),
+            ProcessInstanceStatus.WAITING,
+            toJson(stateWithTrigger.variables().values()),
+            now,
+            stateDeadlineAt,
+            null,
+            null);
+    if (updated == 0) {
+      return state.park();
+    }
+    insertHistory(
+        stateWithTrigger,
+        null,
+        stateDefinition.name(),
+        stateDefinition.name(),
+        triggerType,
+        trigger,
+        now);
+    return scheduleTimer(
+            definition,
+            stateWithTrigger.withState(
+                stateDefinition.name(),
+                ProcessInstanceStatus.WAITING,
+                state.version() + 1,
+                now,
+                stateDeadlineAt),
+            stateDefinition,
+            now)
+        .park();
+  }
+
+  private <P> ExecutionState<P> scheduleTimer(
+      ProcessDefinition<P> definition,
+      ExecutionState<P> state,
+      StateDefinition<P> stateDefinition,
+      Instant now) {
+    Duration delay = stateDefinition.stateTimeout();
+    commandScheduler.scheduleDelayed(
+        new ProcessCommand(state.instanceId(), ProcessCommandReason.RESUME, state.version()),
+        partitionKey(definition.processType(), state.businessKey()),
+        delay);
+    processRepository.insertHistory(
+        new ProcessHistoryRecord(
+            UUID.randomUUID(),
+            state.instanceId(),
+            state.processType(),
+            state.state(),
+            state.state(),
+            "timer-scheduled",
+            "TIMER_SCHEDULED",
+            toJson(timerTrigger(stateDefinition, state.stateDeadlineAt(), now)),
+            now));
+    return state;
   }
 
   private <P> ExecutionState<P> registerWait(
@@ -671,7 +775,7 @@ public class PostgresProcessManager implements ProcessManager {
   private static ProcessInstanceStatus statusForTarget(StateDefinition<?> targetState) {
     return switch (targetState.kind()) {
       case ACTION, DECISION -> ProcessInstanceStatus.RUNNING;
-      case WAIT -> ProcessInstanceStatus.WAITING;
+      case WAIT, TIMER -> ProcessInstanceStatus.WAITING;
       case TERMINAL -> terminalStatus(targetState);
     };
   }
@@ -775,6 +879,20 @@ public class PostgresProcessManager implements ProcessManager {
     if (stateDefinition.timeoutTargetState() != null) {
       trigger.put("targetState", stateDefinition.timeoutTargetState());
     }
+    if (deadlineAt != null) {
+      trigger.put("deadlineAt", deadlineAt.toString());
+    }
+    trigger.put("triggeredAt", triggeredAt.toString());
+    return Map.copyOf(trigger);
+  }
+
+  private static Map<String, Object> timerTrigger(
+      StateDefinition<?> stateDefinition, Instant deadlineAt, Instant triggeredAt) {
+    Map<String, Object> trigger = new LinkedHashMap<>();
+    trigger.put("state", stateDefinition.name());
+    trigger.put("targetState", stateDefinition.timeoutTargetState());
+    trigger.put("delay", stateDefinition.stateTimeout().toString());
+    trigger.put("delayMillis", stateDefinition.stateTimeout().toMillis());
     if (deadlineAt != null) {
       trigger.put("deadlineAt", deadlineAt.toString());
     }

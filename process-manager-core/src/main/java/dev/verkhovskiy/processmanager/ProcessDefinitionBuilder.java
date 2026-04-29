@@ -113,6 +113,13 @@ public final class ProcessDefinitionBuilder<P> {
     return this;
   }
 
+  public ProcessDefinitionBuilder<P> timerState(String name, Consumer<StateBuilder<P>> definition) {
+    StateBuilder<P> builder = new StateBuilder<>(name, StateKind.TIMER);
+    definition.accept(builder);
+    add(builder.build());
+    return this;
+  }
+
   public ProcessDefinitionBuilder<P> decisionState(
       String name, Consumer<StateBuilder<P>> transitions) {
     StateBuilder<P> builder = new StateBuilder<>(name, StateKind.DECISION);
@@ -191,6 +198,16 @@ public final class ProcessDefinitionBuilder<P> {
 
     public StateBuilder<P> waitTimeout(Duration waitTimeout) {
       this.waitTimeout = waitTimeout;
+      return this;
+    }
+
+    public StateBuilder<P> delay(Duration delay) {
+      this.stateTimeout = delay;
+      return this;
+    }
+
+    public StateBuilder<P> targetState(String targetState) {
+      this.timeoutTargetState = targetState;
       return this;
     }
 

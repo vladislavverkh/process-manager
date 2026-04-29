@@ -4,6 +4,7 @@ package dev.verkhovskiy.processmanager;
 public enum StateKind {
   ACTION,
   WAIT,
+  TIMER,
   DECISION,
   TERMINAL
 }

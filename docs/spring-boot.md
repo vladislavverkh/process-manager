@@ -157,5 +157,10 @@ class ProcessManagerTaskQueueConfiguration {
 }
 ```
 
+Task queue хранит только `ProcessCommand`; сами action handlers выполняются в приложении/worker при
+вызове `processManager.resume(command)`. Worker deployment должен иметь те же process definitions и
+action beans, что нужны для исполнения процесса. Подробная модель описана в
+[task-queue-integration.md](task-queue-integration.md).
+
 Если нужна другая очередь, приложение может не подключать `process-manager-task-queue` и объявить
 свой bean `ProcessCommandScheduler`.

@@ -66,6 +66,56 @@ Scheduler:
 TaskQueueProcessCommandScheduler
 ```
 
+## Модель исполнения action
+
+`process-manager-task-queue` не исполняет Java action сам по себе и не кладет action handler в
+очередь. Adapter кладет в `task-queue-postgres` только технический `ProcessCommand`, а выполнение
+текущего state происходит внутри `ProcessManager.resume(command)`.
+
+Базовая цепочка:
+
+```text
+start() / signal()
+  -> process-manager сохраняет durable state в pm_process_instance
+  -> ProcessCommandScheduler ставит ProcessCommand в task-queue
+  -> task-queue worker забирает задачу
+  -> ProcessCommandTaskHandler вызывает processManager.resume(command)
+  -> runtime блокирует instance, читает текущий state и вызывает нужный action bean
+```
+
+Action handler выполняется в том приложении или worker deployment, где поднят
+`ProcessCommandTaskHandler` и где доступны:
+
+- `ProcessManager`;
+- все `ProcessDefinition` beans;
+- все action beans, на которые ссылаются definitions;
+- клиенты внешних систем, репозитории и другая бизнесовая инфраструктура, нужная action.
+
+Очередь не сериализует Java method reference и не знает, какой action нужно вызвать. Она доставляет
+только `ProcessCommand`; runtime определяет action по текущему `state` в `pm_process_instance` и
+зарегистрированному `ProcessDefinition`.
+
+## Разделение API и worker
+
+Можно запускать одно приложение, которое и принимает HTTP/Kafka входящие события, и обрабатывает
+queue tasks. Можно разделить роли:
+
+```text
+api-app
+  принимает start/signal
+  пишет process state
+  enqueue ProcessCommand
+
+worker-app
+  читает task-queue
+  вызывает processManager.resume(command)
+  выполняет action handlers
+```
+
+При таком разделении `worker-app` все равно должен иметь classpath с definitions и action
+implementations. Иначе он сможет прочитать `ProcessCommand`, но не сможет исполнить текущий state
+процесса.
+
 ## Command payload
 
 Queue payload содержит только technical command:
@@ -118,6 +168,68 @@ ProcessCommandScheduler.scheduleDelayed(command, partitionKey, delay)
 
 Task queue считает delay от времени PostgreSQL через `enqueueDelayed`, что защищает от JVM clock skew.
 
+Поток исполнения:
+
+```text
+ACTION вернул RetryableFailure
+  -> runtime сохраняет retry metadata в variables_json
+  -> scheduler ставит delayed ProcessCommand(RETRY, expectedVersion)
+  -> worker позже вызывает resume(command)
+  -> runtime повторно выполняет тот же action state
+```
+
+Если retries закончились, runtime выбирает обычный transition для последнего `RetryableFailure`.
+Например process definition может перевести процесс в parked state.
+
+## WAIT и external event
+
+WAIT state не держит поток и не блокирует worker:
+
+```text
+WAIT state
+  -> runtime регистрирует wait point в pm_process_wait
+  -> instance получает статус WAITING
+
+signal(eventType, correlationKey, payload)
+  -> runtime сохраняет event в pm_process_event_inbox
+  -> scheduler ставит ProcessCommand(RESUME)
+
+worker
+  -> resume(command)
+  -> runtime читает событие из inbox
+  -> выбирает transition по payload события
+```
+
+Если event доставлен повторно с тем же `idempotencyKey`, inbox не создаст дубликат и новая команда
+не будет запланирована.
+
+## TIMER и polling
+
+TIMER state нужен для сценариев polling, когда внешний сервис ответил `202 Accepted`, а финальный
+результат надо узнавать отдельными запросами:
+
+```text
+SEND_COMMAND
+  -> WAIT_NEXT_POLL
+  -> POLL_RESULT
+  -> DONE / FAILED / WAIT_NEXT_POLL
+```
+
+При входе в TIMER:
+
+```text
+TIMER state
+  -> runtime сохраняет state_deadline_at
+  -> scheduler ставит delayed ProcessCommand(RESUME)
+
+worker после delay
+  -> resume(command)
+  -> runtime переводит процесс в targetState
+```
+
+Action polling (`POLL_RESULT`) выполняется уже в следующем action state. Если сервис вернул
+`PENDING`, process definition обычно переводит процесс обратно в TIMER state.
+
 ## Timeout watchdog
 
 Timeout-команды не планируются заранее для каждого state. Runtime сохраняет `process_deadline_at` и
@@ -153,6 +265,7 @@ void processDeadlines() {
 Task queue не должен:
 
 - хранить business payload процесса;
+- хранить или исполнять Java action handler;
 - выбирать transitions;
 - знать `processType`-специфичную бизнес-логику;
 - быть источником истины по статусу процесса.

@@ -31,6 +31,7 @@ Kafka, scheduler в другой БД или собственный executor.
 - есть `ProcessInspector` для чтения instance, wait points и history без изменения процесса;
 - есть `ProcessOperator` для ручной отмены и ручного планирования resume/retry;
 - есть отдельный модуль `process-manager-rest` с Operator REST API;
+- есть пример Spring Boot приложения `process-manager-sample-app`;
 - payload validation и полноценная retry-модель еще развиваются.
 
 ## Документация
@@ -43,7 +44,7 @@ Kafka, scheduler в другой БД или собственный executor.
 - [Интеграция с task-queue-postgres](docs/task-queue-integration.md)
 - [Spring Boot starter](docs/spring-boot.md)
 - [Operator REST API](docs/operator-rest-api.md)
-- [Пример платежного процесса](docs/examples/payment-process.md)
+- [Runnable Spring Boot sample](process-manager-sample-app/README.md)
 - [Roadmap](docs/roadmap.md)
 
 ## Модули
@@ -54,6 +55,7 @@ Kafka, scheduler в другой БД или собственный executor.
   которые явно используют обе библиотеки.
 - `process-manager-spring-boot-starter` - Spring Boot autoconfiguration.
 - `process-manager-rest` - REST API для диагностики и ручных операторских действий.
+- `process-manager-sample-app` - пример приложения с процессом обработки транзакции, PostgreSQL и REST API.
 - `process-manager-testkit` - test helpers для process definitions.
 
 ## Локальная сборка

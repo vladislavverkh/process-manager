@@ -1,0 +1,144 @@
+# process-manager-sample-app
+
+Минимальное Spring Boot приложение, которое использует `process-manager` для обработки
+транзакции.
+
+Сценарий `sample-transaction`:
+
+1. Проверить, что тип транзакции поддерживается.
+2. Найти клиента во внешней системе.
+3. Найти договор во внешней системе.
+4. Создать внутренние действия по транзакции.
+5. Найти макет будущей бухгалтерской проводки и подобрать счета дебета/кредита.
+6. Отправить команду на формирование проводки.
+7. Дождаться результата из парного Kafka topic через `signal(...)`.
+
+Внешние REST/Kafka системы в примере заменены in-memory stubs, чтобы приложение запускалось без
+дополнительных сервисов кроме PostgreSQL.
+
+## Запуск PostgreSQL
+
+```bash
+docker compose -f process-manager-sample-app/docker-compose.yml up -d
+```
+
+Compose публикует PostgreSQL на `localhost:54320`, чтобы не конфликтовать с локальным PostgreSQL на
+стандартном порту `5432`.
+
+Если контейнер уже запускался до добавления Liquibase, пересоздайте volume:
+
+```bash
+docker compose -f process-manager-sample-app/docker-compose.yml down -v
+docker compose -f process-manager-sample-app/docker-compose.yml up -d
+```
+
+## Запуск приложения
+
+```bash
+./gradlew :process-manager-sample-app:bootRun
+```
+
+При старте приложение накатывает Liquibase changelog из `process-manager-postgres`:
+`classpath:db/changelog/process-manager.postgres.sql`.
+
+Swagger UI:
+
+```text
+http://localhost:8080/swagger-ui.html
+```
+
+OpenAPI JSON:
+
+```text
+http://localhost:8080/v3/api-docs
+```
+
+## Happy Path
+
+Создать транзакцию:
+
+```bash
+curl -X POST http://localhost:8080/sample/transactions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "transactionId": "tx-1",
+    "transactionDate": "2026-04-29",
+    "contractNumber": "CONTRACT-1",
+    "transactionType": "ACCRUAL"
+  }'
+```
+
+Передать результат формирования проводки, как будто он пришел из парного Kafka topic:
+
+```bash
+curl -X POST http://localhost:8080/sample/transactions/tx-1/posting-result \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "posted": true,
+    "postingId": "posting-1",
+    "idempotencyKey": "posting-result-1"
+  }'
+```
+
+## Business Error
+
+Неподдерживаемый тип транзакции сразу переведет процесс в `BUSINESS_ERROR`:
+
+```bash
+curl -X POST http://localhost:8080/sample/transactions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "transactionId": "tx-unsupported",
+    "transactionDate": "2026-04-29",
+    "contractNumber": "CONTRACT-2",
+    "transactionType": "UNKNOWN"
+  }'
+```
+
+Business failures от внешних систем можно проверить префиксами:
+
+- `NO-CLIENT-1` - клиент не найден;
+- `NO-CONTRACT-1` - договор не найден;
+- `NO-TEMPLATE-1` - макет проводки не найден.
+
+## Temporary Error And Park
+
+Префикс `TMP-CLIENT-1`, `TMP-CONTRACT-1` или `TMP-ACCOUNTS-1` имитирует постоянную временную
+ошибку REST-сервиса. Runtime выполнит retry, после exhaustion процесс перейдет в state
+`PARKED_TEMPORARY_FAILURE` со статусом `WAITING`.
+
+```bash
+curl -X POST http://localhost:8080/sample/transactions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "transactionId": "tx-temp-client",
+    "transactionDate": "2026-04-29",
+    "contractNumber": "TMP-CLIENT-1",
+    "transactionType": "ACCRUAL"
+  }'
+```
+
+Префиксы `FLAKY-CLIENT-1`, `FLAKY-CONTRACT-1`, `FLAKY-ACCOUNTS-1` имитируют временную ошибку,
+которая проходит после нескольких retry.
+
+Ручной retry припаркованного процесса:
+
+```bash
+curl -X POST http://localhost:8080/sample/transactions/tx-temp-client/retry \
+  -H 'Content-Type: application/json' \
+  -d '{"idempotencyKey":"manual-retry-1"}'
+```
+
+## Диагностика
+
+Список процессов:
+
+```bash
+curl 'http://localhost:8080/sample/transactions'
+```
+
+Operator API библиотеки:
+
+```bash
+curl 'http://localhost:8080/process-manager/processes?processType=sample-transaction'
+```

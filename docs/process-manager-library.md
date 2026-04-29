@@ -11,7 +11,7 @@
 - [Интеграция с task-queue-postgres](task-queue-integration.md)
 - [Spring Boot starter](spring-boot.md)
 - [Operator REST API](operator-rest-api.md)
-- [Пример платежного процесса](examples/payment-process.md)
+- [Runnable Spring Boot sample](../process-manager-sample-app/README.md)
 - [Roadmap](roadmap.md)
 
 ## Testkit
@@ -34,7 +34,7 @@ ProcessDefinitionAssertions.assertThat(payment)
 - Как `task-queue-postgres` используется для retry/resume/timeout: [task-queue-integration.md](task-queue-integration.md)
 - Spring Boot autoconfiguration и свойства: [spring-boot.md](spring-boot.md)
 - REST endpoints для диагностики и ручных операций: [operator-rest-api.md](operator-rest-api.md)
-- Практический пример процесса платежа: [examples/payment-process.md](examples/payment-process.md)
+- Запускаемый пример приложения: [process-manager-sample-app](../process-manager-sample-app/README.md)
 - Ближайшие этапы развития: [roadmap.md](roadmap.md)
 
 ## Документационный принцип

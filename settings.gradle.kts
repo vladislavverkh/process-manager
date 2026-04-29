@@ -11,6 +11,7 @@ include(
     "process-manager-core",
     "process-manager-postgres",
     "process-manager-rest",
+    "process-manager-sample-app",
     "process-manager-spring-boot-starter",
     "process-manager-testkit"
 )

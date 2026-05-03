@@ -48,6 +48,26 @@ final class ProcessTriggerMetadata {
     };
   }
 
+  static String actionResultKind(StepResult result) {
+    return switch (result.baseResult()) {
+      case StepResult.Success ignored -> "SUCCESS";
+      case StepResult.BusinessFailure ignored -> "BUSINESS_FAILURE";
+      case StepResult.RetryableFailure ignored -> "RETRYABLE_FAILURE";
+      case StepResult.FatalFailure ignored -> "FATAL_FAILURE";
+      case StepResult.WithVariables withVariables -> actionResultKind(withVariables.delegate());
+    };
+  }
+
+  static String actionResultCode(StepResult result) {
+    return switch (result.baseResult()) {
+      case StepResult.Success success -> success.code();
+      case StepResult.BusinessFailure failure -> failure.code();
+      case StepResult.RetryableFailure failure -> failure.code();
+      case StepResult.FatalFailure failure -> failure.code();
+      case StepResult.WithVariables withVariables -> actionResultCode(withVariables.delegate());
+    };
+  }
+
   static Map<String, Object> eventTrigger(ExternalEvent event) {
     Map<String, Object> trigger = new LinkedHashMap<>();
     trigger.put("eventType", event.eventType());

@@ -2,8 +2,17 @@ package dev.verkhovskiy.processmanager.runtime;
 
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.deleteAfter;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.statusForTarget;
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.terminalStatus;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.durationBetween;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.stateDeadlineAt;
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.LAST_RETRY_VARIABLE;
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.LAST_TRIGGER_VARIABLE;
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.retryAttempt;
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.retryAttemptVariable;
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.retryMetadataVariable;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.actionResultCode;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.retryExhaustedTrigger;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.retryTrigger;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.timerTrigger;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.triggerVariable;
 
@@ -16,6 +25,7 @@ import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
 import dev.verkhovskiy.processmanager.ProcessVariables;
 import dev.verkhovskiy.processmanager.StateDefinition;
 import dev.verkhovskiy.processmanager.StateKind;
+import dev.verkhovskiy.processmanager.StepResult;
 import dev.verkhovskiy.processmanager.TransitionDefinition;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.postgres.ProcessHistoryRecord;
@@ -26,8 +36,6 @@ import java.util.Map;
 import java.util.UUID;
 
 final class ProcessRuntimePersistence {
-
-  private static final String LAST_TRIGGER_VARIABLE = "_pm.lastTrigger";
 
   private final PostgresProcessRepository processRepository;
   private final ProcessCommandScheduler commandScheduler;
@@ -43,6 +51,52 @@ final class ProcessRuntimePersistence {
     this.commandScheduler = commandScheduler;
     this.runtimeJson = runtimeJson;
     this.metrics = metrics;
+  }
+
+  <P> ProcessExecutionState<P> enterTerminal(
+      ProcessDefinition<P> definition,
+      ProcessExecutionState<P> state,
+      StateDefinition<P> stateDefinition) {
+    if (state.status() == stateDefinition.terminalStatus()) {
+      return state.park();
+    }
+    Instant now = Instant.now();
+    ProcessInstanceStatus terminalStatus = terminalStatus(stateDefinition);
+    ProcessVariables variables =
+        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("START", Map.of()));
+    int updated =
+        processRepository.updateExecutionState(
+            state.instanceId(),
+            state.version(),
+            stateDefinition.name(),
+            terminalStatus,
+            runtimeJson.toJson(variables.values()),
+            now,
+            null,
+            now,
+            deleteAfter(definition, terminalStatus, now));
+    if (updated == 0) {
+      recordOptimisticLockConflict(state);
+      return state.park();
+    }
+    insertHistory(state, null, stateDefinition.name(), "START", "START", Map.of(), now);
+    metrics.recordTransition(
+        definition.processType(),
+        definition.version(),
+        null,
+        stateDefinition.name(),
+        "START",
+        "START");
+    metrics.recordProcessTerminal(
+        definition.processType(),
+        definition.version(),
+        stateDefinition.name(),
+        terminalStatus,
+        durationBetween(state.startedAt(), now));
+    return state
+        .withVariables(variables)
+        .withState(stateDefinition.name(), terminalStatus, state.version() + 1, now, null)
+        .park();
   }
 
   <P> ProcessExecutionState<P> applyTransition(
@@ -226,6 +280,85 @@ final class ProcessRuntimePersistence {
         .park();
   }
 
+  <P> ProcessExecutionState<P> scheduleRetry(
+      ProcessDefinition<P> definition,
+      ProcessExecutionState<P> state,
+      StateDefinition<P> stateDefinition,
+      StepResult result,
+      Instant now) {
+    int nextAttempt = retryAttempt(state, stateDefinition) + 1;
+    Duration delay = stateDefinition.retryPolicy().delayForAttempt(nextAttempt);
+    Map<String, Object> retryMetadata = retryTrigger(stateDefinition, result, nextAttempt, delay);
+    ProcessVariables variables =
+        state
+            .variables()
+            .with(retryAttemptVariable(stateDefinition.name()), nextAttempt)
+            .with(retryMetadataVariable(stateDefinition.name()), retryMetadata)
+            .with(LAST_RETRY_VARIABLE, retryMetadata)
+            .with(LAST_TRIGGER_VARIABLE, triggerVariable("RETRY", retryMetadata));
+    int updated =
+        processRepository.updateExecutionState(
+            state.instanceId(),
+            state.version(),
+            state.state(),
+            ProcessInstanceStatus.RUNNING,
+            runtimeJson.toJson(variables.values()),
+            state.stateEnteredAt(),
+            state.stateDeadlineAt(),
+            null,
+            null);
+    if (updated == 0) {
+      recordOptimisticLockConflict(state);
+      return state.park();
+    }
+    long nextVersion = state.version() + 1;
+    commandScheduler.scheduleDelayed(
+        new ProcessCommand(state.instanceId(), ProcessCommandReason.RETRY, nextVersion),
+        partitionKey(definition.processType(), state.businessKey()),
+        delay);
+    processRepository.insertHistory(
+        new ProcessHistoryRecord(
+            UUID.randomUUID(),
+            state.instanceId(),
+            state.processType(),
+            state.state(),
+            state.state(),
+            "retry",
+            "RETRY",
+            runtimeJson.toJson(retryMetadata),
+            now));
+    metrics.recordRetryScheduled(
+        definition.processType(),
+        stateDefinition.name(),
+        nextAttempt,
+        actionResultCode(result),
+        delay);
+    return state.withVariables(variables).withVersion(nextVersion).park();
+  }
+
+  <P> ProcessExecutionState<P> applyRetryExhaustedTransition(
+      ProcessDefinition<P> definition,
+      ProcessExecutionState<P> state,
+      StateDefinition<P> stateDefinition,
+      StepResult result,
+      Instant now) {
+    Map<String, Object> retryMetadata =
+        retryExhaustedTrigger(stateDefinition, result, retryAttempt(state, stateDefinition));
+    ProcessVariables variables =
+        state
+            .variables()
+            .with(LAST_RETRY_VARIABLE, retryMetadata)
+            .with(LAST_TRIGGER_VARIABLE, triggerVariable("RETRY_EXHAUSTED", retryMetadata));
+    return applyTransition(
+        definition,
+        state.withVariables(variables),
+        stateDefinition,
+        syntheticTransition("retry-exhausted", stateDefinition.retryExhaustedTargetState()),
+        "RETRY_EXHAUSTED",
+        retryMetadata,
+        now);
+  }
+
   private <P> ProcessExecutionState<P> scheduleTimer(
       ProcessDefinition<P> definition,
       ProcessExecutionState<P> state,
@@ -307,6 +440,10 @@ final class ProcessRuntimePersistence {
 
   private void recordOptimisticLockConflict(ProcessExecutionState<?> state) {
     metrics.recordOptimisticLockConflict(state.processType(), state.state());
+  }
+
+  private static <P> TransitionDefinition<P> syntheticTransition(String name, String targetState) {
+    return new TransitionDefinition<>(name, targetState, Integer.MIN_VALUE, context -> true);
   }
 
   private static String partitionKey(String processType, String key) {

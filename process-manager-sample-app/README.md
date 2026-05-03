@@ -20,21 +20,22 @@
 6. Отправить команду на формирование проводки.
 7. Дождаться финального результата через polling или внешнее событие.
 
-Внешние REST/Kafka системы в примере заменены in-memory stubs. Docker Compose поднимает PostgreSQL,
-Prometheus и Grafana; само Spring Boot приложение запускается отдельно.
+Внешние REST/Kafka системы в примере заменены in-memory stubs. Docker Compose поднимает Spring Boot
+приложение, PostgreSQL, Prometheus и Grafana.
 
 Действия по транзакции - это бизнесовые данные sample app. Они хранятся отдельно от process-manager
 state в таблице `sample_transaction_action` и создаются внутренним шагом
 `BUILD_TRANSACTION_ACTIONS`.
 
-## Запуск инфраструктуры
+## Запуск приложения и инфраструктуры
 
 ```bash
-docker compose -f process-manager-sample-app/docker-compose.yml up -d
+docker compose -f process-manager-sample-app/docker-compose.yml up -d --build
 ```
 
 Compose поднимает:
 
+- sample app на `localhost:8080`;
 - PostgreSQL 17 на `localhost:54320`, чтобы не конфликтовать с локальным PostgreSQL на стандартном
   порту `5432`;
 - Prometheus 3.11 на `localhost:9091`, внутри compose-сети он доступен Grafana как
@@ -45,14 +46,19 @@ Compose поднимает:
 
 ```bash
 docker compose -f process-manager-sample-app/docker-compose.yml down -v
-docker compose -f process-manager-sample-app/docker-compose.yml up -d
+docker compose -f process-manager-sample-app/docker-compose.yml up -d --build
 ```
 
-## Запуск приложения
+## Локальный запуск приложения без Docker image
 
 ```bash
 ./gradlew :process-manager-sample-app:bootRun
 ```
+
+Этот режим полезен для разработки кода приложения. Для него все еще можно поднять только
+зависимости через Compose, но Prometheus в bundled config скрейпит container service `app:8080`;
+для локального `bootRun` поменяйте target в `monitoring/prometheus/prometheus.yml` на
+`host.docker.internal:8080`.
 
 При старте приложение накатывает два Liquibase changelog:
 

@@ -1,4 +1,21 @@
 services:
+  app:
+    build:
+      context: ..
+      dockerfile: process-manager-sample-app/Dockerfile
+    image: process-manager-sample-app:local
+    container_name: process-manager-sample-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SAMPLE_DB_URL: jdbc:postgresql://postgres:5432/process_manager_sample
+      SAMPLE_DB_USERNAME: process_manager
+      SAMPLE_DB_PASSWORD: process_manager
+      SAMPLE_SERVER_PORT: 8080
+    ports:
+      - "8080:8080"
+
   postgres:
     image: postgres:17
     container_name: process-manager-sample-postgres
@@ -18,8 +35,7 @@ services:
     image: prom/prometheus:v3.11.1
     container_name: process-manager-sample-prometheus
     depends_on:
-      postgres:
-        condition: service_healthy
+      - app
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"

@@ -114,6 +114,47 @@ class PostgresProcessOperatorTest {
   }
 
   @Test
+  void cancelCanSkipLastVariablesAndHistoryTriggerMetadata() throws Exception {
+    PostgresProcessOperator operator =
+        operator(
+            new ProcessMetadataPolicy(
+                ProcessMetadataPolicy.HistoryTrigger.NONE, false, true, true, true, false, true));
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(Optional.of(instance("WAIT_RESULT", ProcessInstanceStatus.WAITING, 4)));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(4L),
+            eq("WAIT_RESULT"),
+            eq(ProcessInstanceStatus.CANCELLED),
+            any(),
+            eq(STATE_ENTERED_AT),
+            isNull(),
+            any(),
+            any()))
+        .thenReturn(1);
+
+    boolean cancelled = operator.cancel(INSTANCE_ID, "client requested cancellation");
+
+    assertThat(cancelled).isTrue();
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(4L),
+            eq("WAIT_RESULT"),
+            eq(ProcessInstanceStatus.CANCELLED),
+            variablesCaptor.capture(),
+            eq(STATE_ENTERED_AT),
+            isNull(),
+            any(),
+            any());
+    Map<String, Object> variables = objectMapper.readValue(variablesCaptor.getValue(), mapType);
+    assertThat(variables).containsEntry("existing", true);
+    assertThat(variables).doesNotContainKeys("_pm.lastCancel", "_pm.lastTrigger");
+    verify(processRepository).insertHistory(historyCaptor.capture());
+    assertThat(historyCaptor.getValue().triggerJson()).isEqualTo("{}");
+  }
+
+  @Test
   void scheduleResumeUsesCurrentVersion() {
     PostgresProcessOperator operator = operator();
     when(processRepository.findInstanceForUpdate(INSTANCE_ID))
@@ -227,11 +268,17 @@ class PostgresProcessOperatorTest {
   }
 
   private PostgresProcessOperator operator() {
+    return operator(ProcessMetadataPolicy.DEFAULT);
+  }
+
+  private PostgresProcessOperator operator(ProcessMetadataPolicy metadataPolicy) {
     return new PostgresProcessOperator(
         new ProcessDefinitionRegistry(List.of(definition())),
         processRepository,
         commandScheduler,
-        objectMapper);
+        objectMapper,
+        NoopProcessManagerMetrics.INSTANCE,
+        metadataPolicy);
   }
 
   private static ProcessDefinition<PaymentPayload> definition() {

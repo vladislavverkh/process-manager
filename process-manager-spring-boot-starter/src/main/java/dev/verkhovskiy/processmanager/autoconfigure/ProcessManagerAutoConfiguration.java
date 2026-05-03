@@ -80,6 +80,7 @@ public class ProcessManagerAutoConfiguration {
       ProcessCommandScheduler commandScheduler,
       ObjectMapper objectMapper,
       ProcessPayloadMapper payloadMapper,
+      ProcessManagerProperties properties,
       ObjectProvider<ProcessManagerMetrics> metrics) {
     return new PostgresProcessManager(
         definitionRegistry,
@@ -87,7 +88,8 @@ public class ProcessManagerAutoConfiguration {
         commandScheduler,
         objectMapper,
         payloadMapper,
-        metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE));
+        metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE),
+        properties.metadataPolicy());
   }
 
   @Bean
@@ -98,13 +100,15 @@ public class ProcessManagerAutoConfiguration {
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
       ObjectMapper objectMapper,
+      ProcessManagerProperties properties,
       ObjectProvider<ProcessManagerMetrics> metrics) {
     return new PostgresProcessOperator(
         definitionRegistry,
         processRepository,
         commandScheduler,
         objectMapper,
-        metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE));
+        metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE),
+        properties.metadataPolicy());
   }
 
   @Bean

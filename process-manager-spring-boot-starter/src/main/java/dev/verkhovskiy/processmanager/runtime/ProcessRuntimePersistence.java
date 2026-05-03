@@ -5,16 +5,12 @@ import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.stat
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.terminalStatus;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.durationBetween;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.stateDeadlineAt;
-import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.LAST_RETRY_VARIABLE;
-import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.LAST_TRIGGER_VARIABLE;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.retryAttempt;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.retryAttemptVariable;
-import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.retryMetadataVariable;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.actionResultCode;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.retryExhaustedTrigger;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.retryTrigger;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.timerTrigger;
-import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.triggerVariable;
 
 import dev.verkhovskiy.processmanager.ProcessCommand;
 import dev.verkhovskiy.processmanager.ProcessCommandReason;
@@ -41,16 +37,19 @@ final class ProcessRuntimePersistence {
   private final ProcessCommandScheduler commandScheduler;
   private final ProcessRuntimeJson runtimeJson;
   private final ProcessManagerMetrics metrics;
+  private final ProcessMetadataPolicy metadataPolicy;
 
   ProcessRuntimePersistence(
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
       ProcessRuntimeJson runtimeJson,
-      ProcessManagerMetrics metrics) {
+      ProcessManagerMetrics metrics,
+      ProcessMetadataPolicy metadataPolicy) {
     this.processRepository = processRepository;
     this.commandScheduler = commandScheduler;
     this.runtimeJson = runtimeJson;
     this.metrics = metrics;
+    this.metadataPolicy = metadataPolicy == null ? ProcessMetadataPolicy.DEFAULT : metadataPolicy;
   }
 
   <P> ProcessExecutionState<P> enterTerminal(
@@ -63,7 +62,7 @@ final class ProcessRuntimePersistence {
     Instant now = Instant.now();
     ProcessInstanceStatus terminalStatus = terminalStatus(stateDefinition);
     ProcessVariables variables =
-        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("START", Map.of()));
+        metadataPolicy.withLastTrigger(state.variables(), "START", Map.of());
     int updated =
         processRepository.updateExecutionState(
             state.instanceId(),
@@ -140,7 +139,7 @@ final class ProcessRuntimePersistence {
             targetState.name(),
             transition.name(),
             triggerType,
-            runtimeJson.toJson(trigger),
+            runtimeJson.toJson(metadataPolicy.historyTrigger(triggerType, trigger)),
             now));
     metrics.recordTransition(
         definition.processType(),
@@ -182,7 +181,7 @@ final class ProcessRuntimePersistence {
       Map<String, Object> trigger,
       Instant now) {
     ProcessVariables variables =
-        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable(triggerType, trigger));
+        metadataPolicy.withLastTrigger(state.variables(), triggerType, trigger);
     ProcessExecutionState<P> stateWithTrigger = state.withVariables(variables);
     int updated =
         processRepository.updateExecutionState(
@@ -234,7 +233,7 @@ final class ProcessRuntimePersistence {
       Map<String, Object> trigger,
       Instant now) {
     ProcessVariables variables =
-        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable(triggerType, trigger));
+        metadataPolicy.withLastTrigger(state.variables(), triggerType, trigger);
     ProcessExecutionState<P> stateWithTrigger = state.withVariables(variables);
     Instant stateDeadlineAt = stateDeadlineAt(stateDefinition, now);
     int updated =
@@ -290,12 +289,10 @@ final class ProcessRuntimePersistence {
     Duration delay = stateDefinition.retryPolicy().delayForAttempt(nextAttempt);
     Map<String, Object> retryMetadata = retryTrigger(stateDefinition, result, nextAttempt, delay);
     ProcessVariables variables =
-        state
-            .variables()
-            .with(retryAttemptVariable(stateDefinition.name()), nextAttempt)
-            .with(retryMetadataVariable(stateDefinition.name()), retryMetadata)
-            .with(LAST_RETRY_VARIABLE, retryMetadata)
-            .with(LAST_TRIGGER_VARIABLE, triggerVariable("RETRY", retryMetadata));
+        state.variables().with(retryAttemptVariable(stateDefinition.name()), nextAttempt);
+    variables = metadataPolicy.withRetryMetadata(variables, stateDefinition.name(), retryMetadata);
+    variables = metadataPolicy.withLastRetry(variables, retryMetadata);
+    variables = metadataPolicy.withLastTrigger(variables, "RETRY", retryMetadata);
     int updated =
         processRepository.updateExecutionState(
             state.instanceId(),
@@ -325,7 +322,7 @@ final class ProcessRuntimePersistence {
             state.state(),
             "retry",
             "RETRY",
-            runtimeJson.toJson(retryMetadata),
+            runtimeJson.toJson(metadataPolicy.historyTrigger("RETRY", retryMetadata)),
             now));
     metrics.recordRetryScheduled(
         definition.processType(),
@@ -344,11 +341,8 @@ final class ProcessRuntimePersistence {
       Instant now) {
     Map<String, Object> retryMetadata =
         retryExhaustedTrigger(stateDefinition, result, retryAttempt(state, stateDefinition));
-    ProcessVariables variables =
-        state
-            .variables()
-            .with(LAST_RETRY_VARIABLE, retryMetadata)
-            .with(LAST_TRIGGER_VARIABLE, triggerVariable("RETRY_EXHAUSTED", retryMetadata));
+    ProcessVariables variables = metadataPolicy.withLastRetry(state.variables(), retryMetadata);
+    variables = metadataPolicy.withLastTrigger(variables, "RETRY_EXHAUSTED", retryMetadata);
     return applyTransition(
         definition,
         state.withVariables(variables),
@@ -378,7 +372,10 @@ final class ProcessRuntimePersistence {
             state.state(),
             "timer-scheduled",
             "TIMER_SCHEDULED",
-            runtimeJson.toJson(timerTrigger(stateDefinition, state.stateDeadlineAt(), now)),
+            runtimeJson.toJson(
+                metadataPolicy.historyTrigger(
+                    "TIMER_SCHEDULED",
+                    timerTrigger(stateDefinition, state.stateDeadlineAt(), now))),
             now));
     metrics.recordTimerScheduled(definition.processType(), stateDefinition.name(), delay);
     return state;
@@ -434,7 +431,7 @@ final class ProcessRuntimePersistence {
             toState,
             transitionName,
             triggerType,
-            runtimeJson.toJson(trigger),
+            runtimeJson.toJson(metadataPolicy.historyTrigger(triggerType, trigger)),
             now));
   }
 

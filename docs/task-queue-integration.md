@@ -172,11 +172,15 @@ Task queue считает delay от времени PostgreSQL через `enque
 
 ```text
 ACTION вернул RetryableFailure
-  -> runtime сохраняет retry metadata в variables_json
+  -> runtime сохраняет retry attempt в variables_json
   -> scheduler ставит delayed ProcessCommand(RETRY, expectedVersion)
   -> worker позже вызывает resume(command)
   -> runtime повторно выполняет тот же action state
 ```
+
+Подробная retry metadata в `_pm.retry.<state>` и `_pm.lastRetry` является диагностической и может
+быть отключена через `process.manager.metadata.variables.*`. `_pm.retry.<state>.attempt` всегда
+сохраняется, потому что по нему считается retry budget.
 
 Если retries закончились, runtime выбирает обычный transition для последнего `RetryableFailure`.
 Например process definition может перевести процесс в parked state.

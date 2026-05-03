@@ -909,12 +909,89 @@ class PostgresProcessManagerTest {
     verifyNoInteractions(commandScheduler);
   }
 
+  @Test
+  void metadataPolicyCanSummarizeHistoryAndSkipLastVariables() throws Exception {
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .initialState("SEND")
+            .actionState(
+                "SEND",
+                state ->
+                    state
+                        .action(
+                            ctx ->
+                                StepResult.success(
+                                    "OK", Map.of("providerPayload", Map.of("large", "value"))))
+                        .transition(
+                            transition ->
+                                transition.name("sent").targetState("DONE").condition(ctx -> true)))
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .build();
+    PostgresProcessManager manager =
+        manager(
+            definition,
+            new ProcessMetadataPolicy(
+                ProcessMetadataPolicy.HistoryTrigger.SUMMARY,
+                false,
+                false,
+                true,
+                true,
+                true,
+                true));
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(Optional.of(instance("SEND", ProcessInstanceStatus.RUNNING, 0)));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(0L),
+            eq("DONE"),
+            eq(ProcessInstanceStatus.COMPLETED),
+            any(),
+            any(),
+            isNull(),
+            any(),
+            any()))
+        .thenReturn(1);
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.START, 0));
+
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(0L),
+            eq("DONE"),
+            eq(ProcessInstanceStatus.COMPLETED),
+            variablesCaptor.capture(),
+            any(),
+            isNull(),
+            any(),
+            any());
+    Map<String, Object> variables = jsonMap(variablesCaptor.getValue());
+    assertThat(variables)
+        .containsKey("providerPayload")
+        .doesNotContainKeys("_pm.lastActionResult", "_pm.lastTrigger");
+    verify(processRepository).insertHistory(historyCaptor.capture());
+    assertThat(historyCaptor.getValue().triggerJson())
+        .contains("\"type\":\"ACTION_RESULT\"")
+        .contains("\"kind\":\"SUCCESS\"")
+        .contains("\"code\":\"OK\"")
+        .doesNotContain("providerPayload")
+        .doesNotContain("large");
+  }
+
   private PostgresProcessManager manager(ProcessDefinition<PaymentPayload> definition) {
+    return manager(definition, ProcessMetadataPolicy.DEFAULT);
+  }
+
+  private PostgresProcessManager manager(
+      ProcessDefinition<PaymentPayload> definition, ProcessMetadataPolicy metadataPolicy) {
     return new PostgresProcessManager(
         new ProcessDefinitionRegistry(List.of(definition)),
         processRepository,
         commandScheduler,
-        objectMapper);
+        objectMapper,
+        null,
+        NoopProcessManagerMetrics.INSTANCE,
+        metadataPolicy);
   }
 
   private static ProcessDefinition<PaymentPayload> simpleDefinition() {

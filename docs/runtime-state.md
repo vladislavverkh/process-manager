@@ -74,6 +74,13 @@ Runtime обновляет variables после исполнения steps:
   `TIMER`, `PROCESS_TIMEOUT`, `STATE_TIMEOUT`, `RETRY`, `RETRY_EXHAUSTED`, `MANUAL_CANCEL`,
   `MANUAL_RETRY` или `START`.
 
+Сохранение диагностических `_pm.last*` variables и объем `pm_process_history.trigger_json`
+настраиваются через `process.manager.metadata.*`. По умолчанию runtime сохраняет metadata полностью,
+чтобы поведение оставалось совместимым. Для уменьшения объема можно отключить отдельные
+`_pm.lastTrigger`, `_pm.lastActionResult`, `_pm.lastEvent`, `_pm.lastRetry`, `_pm.lastCancel` и
+`_pm.retry.<state>`. `_pm.retry.<state>.attempt` не отключается, потому что он нужен для retry
+budget.
+
 Служебный префикс `_pm.` зарезервирован runtime'ом. Пользовательские variables не должны
 использовать этот namespace.
 

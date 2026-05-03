@@ -8,9 +8,6 @@ import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.elapse
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.processTimeoutCommand;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.stateDeadlineAt;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.stateTimeoutCommand;
-import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.LAST_ACTION_RESULT_VARIABLE;
-import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.LAST_EVENT_VARIABLE;
-import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.LAST_TRIGGER_VARIABLE;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.canRetry;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.withoutRetryMetadata;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.actionData;
@@ -21,7 +18,6 @@ import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.even
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.processTimeoutTrigger;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.stateTimeoutTrigger;
 import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.timerTrigger;
-import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.triggerVariable;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.verkhovskiy.processmanager.ExternalEvent;
@@ -66,6 +62,7 @@ public class PostgresProcessManager implements ProcessManager {
   private final ProcessCommandScheduler commandScheduler;
   private final ProcessRuntimeJson runtimeJson;
   private final ProcessRuntimePersistence runtimePersistence;
+  private final ProcessMetadataPolicy metadataPolicy;
   private final ProcessPayloadMapper payloadMapper;
   private final ProcessManagerMetrics metrics;
   private final TransitionSelector transitionSelector = new TransitionSelector();
@@ -100,6 +97,24 @@ public class PostgresProcessManager implements ProcessManager {
       ObjectMapper objectMapper,
       ProcessPayloadMapper payloadMapper,
       ProcessManagerMetrics metrics) {
+    this(
+        definitionRegistry,
+        processRepository,
+        commandScheduler,
+        objectMapper,
+        payloadMapper,
+        metrics,
+        ProcessMetadataPolicy.DEFAULT);
+  }
+
+  public PostgresProcessManager(
+      ProcessDefinitionRegistry definitionRegistry,
+      PostgresProcessRepository processRepository,
+      ProcessCommandScheduler commandScheduler,
+      ObjectMapper objectMapper,
+      ProcessPayloadMapper payloadMapper,
+      ProcessManagerMetrics metrics,
+      ProcessMetadataPolicy metadataPolicy) {
     this.definitionRegistry = definitionRegistry;
     this.processRepository = processRepository;
     this.commandScheduler = commandScheduler;
@@ -107,9 +122,10 @@ public class PostgresProcessManager implements ProcessManager {
     this.payloadMapper =
         payloadMapper == null ? new JacksonProcessPayloadMapper(objectMapper) : payloadMapper;
     this.metrics = metrics == null ? NoopProcessManagerMetrics.INSTANCE : metrics;
+    this.metadataPolicy = metadataPolicy == null ? ProcessMetadataPolicy.DEFAULT : metadataPolicy;
     this.runtimePersistence =
         new ProcessRuntimePersistence(
-            processRepository, commandScheduler, runtimeJson, this.metrics);
+            processRepository, commandScheduler, runtimeJson, this.metrics, this.metadataPolicy);
   }
 
   @Override
@@ -437,9 +453,9 @@ public class PostgresProcessManager implements ProcessManager {
       Map<String, Object> trigger,
       Instant now) {
     ProcessVariables variables =
-        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable(triggerType, trigger));
+        metadataPolicy.withLastTrigger(state.variables(), triggerType, trigger);
     if (event != null) {
-      variables = variables.with(LAST_EVENT_VARIABLE, trigger);
+      variables = metadataPolicy.withLastEvent(variables, trigger);
     }
     ProcessExecutionState<P> triggeredState = state.withVariables(variables);
     TransitionDefinition<P> transition =
@@ -466,9 +482,7 @@ public class PostgresProcessManager implements ProcessManager {
     return runtimePersistence.applyTransition(
         definition,
         state.withVariables(
-            state
-                .variables()
-                .with(LAST_TRIGGER_VARIABLE, triggerVariable("PROCESS_TIMEOUT", trigger))),
+            metadataPolicy.withLastTrigger(state.variables(), "PROCESS_TIMEOUT", trigger)),
         stateDefinition,
         syntheticTransition("process-timeout", definition.processTimeoutTargetState()),
         "PROCESS_TIMEOUT",
@@ -493,9 +507,7 @@ public class PostgresProcessManager implements ProcessManager {
       return runtimePersistence.applyTransition(
           definition,
           state.withVariables(
-              state
-                  .variables()
-                  .with(LAST_TRIGGER_VARIABLE, triggerVariable("STATE_TIMEOUT", trigger))),
+              metadataPolicy.withLastTrigger(state.variables(), "STATE_TIMEOUT", trigger)),
           stateDefinition,
           syntheticTransition("state-timeout", stateDefinition.timeoutTargetState()),
           "STATE_TIMEOUT",
@@ -519,7 +531,7 @@ public class PostgresProcessManager implements ProcessManager {
         runtimePersistence.applyTransition(
             definition,
             state.withVariables(
-                state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("TIMER", trigger))),
+                metadataPolicy.withLastTrigger(state.variables(), "TIMER", trigger)),
             stateDefinition,
             syntheticTransition("timer-fired", stateDefinition.timeoutTargetState()),
             "TIMER",
@@ -561,15 +573,12 @@ public class PostgresProcessManager implements ProcessManager {
         now);
   }
 
-  private static ProcessVariables applyActionVariables(
-      ProcessExecutionState<?> state, StepResult result) {
+  private ProcessVariables applyActionVariables(ProcessExecutionState<?> state, StepResult result) {
     Map<String, Object> actionTrigger = actionTrigger(result);
-    return state
-        .variables()
-        .withAll(actionData(result))
-        .withAll(result.variableUpdates())
-        .with(LAST_ACTION_RESULT_VARIABLE, actionTrigger)
-        .with(LAST_TRIGGER_VARIABLE, triggerVariable("ACTION_RESULT", actionTrigger));
+    ProcessVariables variables =
+        state.variables().withAll(actionData(result)).withAll(result.variableUpdates());
+    variables = metadataPolicy.withLastActionResult(variables, actionTrigger);
+    return metadataPolicy.withLastTrigger(variables, "ACTION_RESULT", actionTrigger);
   }
 
   private static <P> TransitionDefinition<P> syntheticTransition(String name, String targetState) {

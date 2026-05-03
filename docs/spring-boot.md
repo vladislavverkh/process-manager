@@ -55,9 +55,34 @@ process.manager
 | `process.manager.enabled` | `true` | Включает/отключает autoconfiguration |
 | `process.manager.cleanup-batch-size` | `100` | Batch size одного прохода retention cleanup |
 | `process.manager.deadline-batch-size` | `100` | Batch size одного прохода deadline watchdog |
+| `process.manager.metadata.history-trigger` | `full` | Объем `trigger_json` в `pm_process_history`: `full`, `summary` или `none` |
+| `process.manager.metadata.variables.last-trigger` | `true` | Сохранять `_pm.lastTrigger` в `variables_json` |
+| `process.manager.metadata.variables.last-action-result` | `true` | Сохранять `_pm.lastActionResult` в `variables_json` |
+| `process.manager.metadata.variables.last-event` | `true` | Сохранять `_pm.lastEvent` в `variables_json` |
+| `process.manager.metadata.variables.last-retry` | `true` | Сохранять `_pm.lastRetry` в `variables_json` |
+| `process.manager.metadata.variables.last-cancel` | `true` | Сохранять `_pm.lastCancel` при ручной отмене |
+| `process.manager.metadata.variables.retry-metadata` | `true` | Сохранять `_pm.retry.<state>` с подробной retry metadata |
 
 Starter публикует `META-INF/spring-configuration-metadata.json`, поэтому Spring Boot-aware IDE
 подсказывают эти свойства в `application.yml` и `application.properties`.
+
+Если нужно уменьшить объем диагностической metadata, можно оставить обязательный runtime state и
+урезать только служебные details:
+
+```yaml
+process:
+  manager:
+    metadata:
+      history-trigger: summary
+      variables:
+        last-event: false
+        last-action-result: false
+```
+
+`history-trigger=summary` сохраняет в history компактные trigger details без payload/data/message.
+`history-trigger=none` оставляет `trigger_type`, `transition_name`, `from_state` и `to_state`, но
+пишет пустой `{}` в `trigger_json`. Retry budget продолжает работать независимо от этих настроек,
+потому что `_pm.retry.<state>.attempt` всегда сохраняется.
 
 ## Регистрация process definitions
 

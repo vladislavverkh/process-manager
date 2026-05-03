@@ -1,5 +1,9 @@
 package dev.verkhovskiy.processmanager.runtime;
 
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.LAST_RETRY_VARIABLE;
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.retryAttemptVariable;
+import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeVariables.retryMetadataVariable;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -30,10 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
     justification = "Зависимости являются внедренными инфраструктурными Spring-бинами.")
 public class PostgresProcessOperator implements ProcessOperator {
 
-  private static final String LAST_TRIGGER_VARIABLE = "_pm.lastTrigger";
-  private static final String LAST_CANCEL_VARIABLE = "_pm.lastCancel";
-  private static final String LAST_RETRY_VARIABLE = "_pm.lastRetry";
-  private static final String RETRY_ATTEMPT_VARIABLE_PREFIX = "_pm.retry.";
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private final ProcessDefinitionRegistry definitionRegistry;
@@ -41,6 +41,7 @@ public class PostgresProcessOperator implements ProcessOperator {
   private final ProcessCommandScheduler commandScheduler;
   private final ObjectMapper objectMapper;
   private final ProcessManagerMetrics metrics;
+  private final ProcessMetadataPolicy metadataPolicy;
 
   public PostgresProcessOperator(
       ProcessDefinitionRegistry definitionRegistry,
@@ -61,11 +62,28 @@ public class PostgresProcessOperator implements ProcessOperator {
       ProcessCommandScheduler commandScheduler,
       ObjectMapper objectMapper,
       ProcessManagerMetrics metrics) {
+    this(
+        definitionRegistry,
+        processRepository,
+        commandScheduler,
+        objectMapper,
+        metrics,
+        ProcessMetadataPolicy.DEFAULT);
+  }
+
+  public PostgresProcessOperator(
+      ProcessDefinitionRegistry definitionRegistry,
+      PostgresProcessRepository processRepository,
+      ProcessCommandScheduler commandScheduler,
+      ObjectMapper objectMapper,
+      ProcessManagerMetrics metrics,
+      ProcessMetadataPolicy metadataPolicy) {
     this.definitionRegistry = definitionRegistry;
     this.processRepository = processRepository;
     this.commandScheduler = commandScheduler;
     this.objectMapper = objectMapper;
     this.metrics = metrics == null ? NoopProcessManagerMetrics.INSTANCE : metrics;
+    this.metadataPolicy = metadataPolicy == null ? ProcessMetadataPolicy.DEFAULT : metadataPolicy;
   }
 
   @Override
@@ -92,9 +110,9 @@ public class PostgresProcessOperator implements ProcessOperator {
       Instant now = Instant.now();
       Map<String, Object> trigger = manualCancelTrigger(reason, now);
       ProcessVariables variables =
-          new ProcessVariables(readMap(instance.variablesJson(), "process variables"))
-              .with(LAST_CANCEL_VARIABLE, trigger)
-              .with(LAST_TRIGGER_VARIABLE, triggerVariable("MANUAL_CANCEL", trigger));
+          new ProcessVariables(readMap(instance.variablesJson(), "process variables"));
+      variables = metadataPolicy.withLastCancel(variables, trigger);
+      variables = metadataPolicy.withLastTrigger(variables, "MANUAL_CANCEL", trigger);
 
       int updated =
           processRepository.updateExecutionState(
@@ -122,7 +140,7 @@ public class PostgresProcessOperator implements ProcessOperator {
               instance.state(),
               "manual-cancel",
               "MANUAL_CANCEL",
-              toJson(trigger),
+              toJson(metadataPolicy.historyTrigger("MANUAL_CANCEL", trigger)),
               now));
       metrics.recordTransition(
           instance.processType(),
@@ -213,8 +231,8 @@ public class PostgresProcessOperator implements ProcessOperator {
           new ProcessVariables(readMap(instance.variablesJson(), "process variables"))
               .without(retryAttemptVariable(instance.state()))
               .without(retryMetadataVariable(instance.state()))
-              .without(LAST_RETRY_VARIABLE)
-              .with(LAST_TRIGGER_VARIABLE, triggerVariable("MANUAL_RETRY", trigger));
+              .without(LAST_RETRY_VARIABLE);
+      variables = metadataPolicy.withLastTrigger(variables, "MANUAL_RETRY", trigger);
       int updated =
           processRepository.updateExecutionState(
               instance.instanceId(),
@@ -245,7 +263,7 @@ public class PostgresProcessOperator implements ProcessOperator {
               instance.state(),
               "manual-retry",
               "MANUAL_RETRY",
-              toJson(trigger),
+              toJson(metadataPolicy.historyTrigger("MANUAL_RETRY", trigger)),
               now));
       metrics.recordTransition(
           instance.processType(),
@@ -297,26 +315,10 @@ public class PostgresProcessOperator implements ProcessOperator {
     return Map.copyOf(trigger);
   }
 
-  private static Map<String, Object> triggerVariable(
-      String triggerType, Map<String, Object> trigger) {
-    Map<String, Object> value = new LinkedHashMap<>();
-    value.put("type", triggerType);
-    value.putAll(trigger == null ? Map.of() : trigger);
-    return Map.copyOf(value);
-  }
-
   private static boolean terminalStatus(ProcessInstanceStatus status) {
     return status == ProcessInstanceStatus.COMPLETED
         || status == ProcessInstanceStatus.FAILED
         || status == ProcessInstanceStatus.CANCELLED;
-  }
-
-  private static String retryAttemptVariable(String state) {
-    return RETRY_ATTEMPT_VARIABLE_PREFIX + state + ".attempt";
-  }
-
-  private static String retryMetadataVariable(String state) {
-    return RETRY_ATTEMPT_VARIABLE_PREFIX + state;
   }
 
   private static Instant deleteAfter(

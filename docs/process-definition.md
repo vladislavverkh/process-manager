@@ -296,6 +296,10 @@ Runtime также сохраняет служебные variables:
 - `_pm.lastRetry` - metadata последнего retry или retry exhaustion;
 - `_pm.lastTrigger` - последняя причина продолжения процесса.
 
+Эти служебные variables являются диагностическими и могут быть отключены на уровне Spring Boot
+properties `process.manager.metadata.variables.*`. Если process definition читает `_pm.last*` из
+`ProcessVariables`, соответствующую настройку нужно оставить включенной.
+
 ## Registry
 
 В Spring Boot сценарии будут регистрироваться как beans:

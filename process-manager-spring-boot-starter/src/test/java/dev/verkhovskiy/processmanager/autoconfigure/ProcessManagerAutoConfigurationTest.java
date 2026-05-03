@@ -13,6 +13,7 @@ import dev.verkhovskiy.processmanager.ProcessPayloadMapper;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
 import dev.verkhovskiy.processmanager.runtime.ProcessManagerMetrics;
+import dev.verkhovskiy.processmanager.runtime.ProcessMetadataPolicy;
 import dev.verkhovskiy.processmanager.runtime.ProcessRetentionCleanup;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -55,6 +56,31 @@ class ProcessManagerAutoConfigurationTest {
     contextRunner
         .withPropertyValues("process.manager.enabled=false")
         .run(context -> assertThat(context).doesNotHaveBean(ProcessManager.class));
+  }
+
+  @Test
+  void bindsMetadataProperties() {
+    contextRunner
+        .withPropertyValues(
+            "process.manager.metadata.history-trigger=summary",
+            "process.manager.metadata.variables.last-trigger=false",
+            "process.manager.metadata.variables.last-action-result=false",
+            "process.manager.metadata.variables.last-event=false",
+            "process.manager.metadata.variables.last-retry=false",
+            "process.manager.metadata.variables.last-cancel=false",
+            "process.manager.metadata.variables.retry-metadata=false")
+        .run(
+            context -> {
+              ProcessManagerProperties properties = context.getBean(ProcessManagerProperties.class);
+              assertThat(properties.getMetadata().getHistoryTrigger())
+                  .isEqualTo(ProcessMetadataPolicy.HistoryTrigger.SUMMARY);
+              assertThat(properties.getMetadata().getVariables().isLastTrigger()).isFalse();
+              assertThat(properties.getMetadata().getVariables().isLastActionResult()).isFalse();
+              assertThat(properties.getMetadata().getVariables().isLastEvent()).isFalse();
+              assertThat(properties.getMetadata().getVariables().isLastRetry()).isFalse();
+              assertThat(properties.getMetadata().getVariables().isLastCancel()).isFalse();
+              assertThat(properties.getMetadata().getVariables().isRetryMetadata()).isFalse();
+            });
   }
 
   @Test

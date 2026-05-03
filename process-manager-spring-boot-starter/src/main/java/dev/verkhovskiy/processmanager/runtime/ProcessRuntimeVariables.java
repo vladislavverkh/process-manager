@@ -9,6 +9,7 @@ final class ProcessRuntimeVariables {
   static final String LAST_ACTION_RESULT_VARIABLE = "_pm.lastActionResult";
   static final String LAST_EVENT_VARIABLE = "_pm.lastEvent";
   static final String LAST_RETRY_VARIABLE = "_pm.lastRetry";
+  static final String LAST_CANCEL_VARIABLE = "_pm.lastCancel";
 
   private static final String RETRY_ATTEMPT_VARIABLE_PREFIX = "_pm.retry.";
 

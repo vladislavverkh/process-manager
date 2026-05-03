@@ -152,6 +152,34 @@ final class ProcessTriggerMetadata {
     return Map.copyOf(value);
   }
 
+  static Map<String, Object> summaryTrigger(String triggerType, Map<String, Object> trigger) {
+    if (trigger == null || trigger.isEmpty()) {
+      return Map.of("type", triggerType);
+    }
+    Map<String, Object> summary = new LinkedHashMap<>();
+    summary.put("type", triggerType);
+    trigger.forEach((key, value) -> putSummaryValue(summary, key, value));
+    return Map.copyOf(summary);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void putSummaryValue(Map<String, Object> summary, String key, Object value) {
+    if (value == null || "payload".equals(key) || "data".equals(key) || "message".equals(key)) {
+      return;
+    }
+    if ("failure".equals(key) && value instanceof Map<?, ?> failure) {
+      Map<String, Object> failureSummary = summaryTrigger("FAILURE", (Map<String, Object>) failure);
+      summary.put(key, failureSummary);
+      return;
+    }
+    if (value instanceof String
+        || value instanceof Number
+        || value instanceof Boolean
+        || value instanceof Enum<?>) {
+      summary.put(key, value);
+    }
+  }
+
   private static String nullToEmpty(String value) {
     return value == null ? "" : value;
   }

@@ -867,6 +867,59 @@
       ],
       "title": "Operator Operations",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 60
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "process_manager_retention_expired",
+          "legendFormat": "expired",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (outcome) (rate(process_manager_retention_cleanup_runs_total[5m]))",
+          "legendFormat": "runs {{outcome}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (outcome) (rate(process_manager_retention_cleanup_deleted_total[5m]))",
+          "legendFormat": "deleted {{outcome}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (outcome) (rate(process_manager_retention_cleanup_duration_seconds_sum[5m])) / sum by (outcome) (rate(process_manager_retention_cleanup_duration_seconds_count[5m]))",
+          "legendFormat": "duration {{outcome}}",
+          "refId": "D"
+        }
+      ],
+      "title": "Retention Cleanup",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",

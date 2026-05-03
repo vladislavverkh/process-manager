@@ -733,6 +733,22 @@ public class PostgresProcessRepository {
             """);
   }
 
+  /** Считает terminal instances с истекшим retention сроком для runtime gauges. */
+  public long countExpiredTerminalInstances() {
+    return count(
+        """
+            with runtime_clock as (
+                select clock_timestamp() as now
+            )
+            select count(*)
+              from pm_process_instance
+             cross join runtime_clock
+             where status in ('COMPLETED', 'FAILED', 'CANCELLED')
+               and delete_after is not null
+               and delete_after <= runtime_clock.now
+            """);
+  }
+
   private static MapSqlParameterSource instanceParameters(StoredProcessInstance instance) {
     return new MapSqlParameterSource()
         .addValue("instanceId", instance.instanceId())

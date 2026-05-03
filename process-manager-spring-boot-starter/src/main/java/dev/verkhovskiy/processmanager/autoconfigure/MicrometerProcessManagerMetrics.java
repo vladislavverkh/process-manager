@@ -254,6 +254,24 @@ final class MicrometerProcessManagerMetrics implements ProcessManagerMetrics {
   }
 
   @Override
+  public void recordRetentionCleanup(Duration duration, int deletedInstances, String outcome) {
+    counter("process.manager.retention.cleanup.runs")
+        .tag("outcome", value(outcome))
+        .register(registry)
+        .increment();
+    if (deletedInstances > 0) {
+      counter("process.manager.retention.cleanup.deleted")
+          .tag("outcome", value(outcome))
+          .register(registry)
+          .increment(deletedInstances);
+    }
+    timer("process.manager.retention.cleanup.duration")
+        .tag("outcome", value(outcome))
+        .register(registry)
+        .record(duration(duration));
+  }
+
+  @Override
   public void recordOperatorOperation(String operation, String processType, String outcome) {
     counter("process.manager.operator.operations")
         .tag("operation", value(operation))

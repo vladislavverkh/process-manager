@@ -59,6 +59,11 @@ docker compose -f process-manager-sample-app/docker-compose.yml up -d
 - `classpath:db/changelog/process-manager.postgres.sql` - runtime tables библиотеки;
 - `classpath:db/changelog/sample-app.postgres.sql` - бизнесовые таблицы sample app.
 
+Sample app запускает два scheduled runtime job:
+
+- deadline watchdog каждые `${sample.process-deadline-scan-delay:PT10S}`;
+- retention cleanup каждые `${sample.process-retention-cleanup-delay:PT1M}`.
+
 Swagger UI:
 
 ```text

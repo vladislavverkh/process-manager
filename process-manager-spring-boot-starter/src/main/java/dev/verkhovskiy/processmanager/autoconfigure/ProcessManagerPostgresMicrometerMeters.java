@@ -26,6 +26,10 @@ final class ProcessManagerPostgresMicrometerMeters {
         meterRegistry,
         "process.manager.deadline.overdue",
         PostgresProcessRepository::countOverdueDeadlines);
+    registerGauge(
+        meterRegistry,
+        "process.manager.retention.expired",
+        PostgresProcessRepository::countExpiredTerminalInstances);
   }
 
   private void registerGauge(

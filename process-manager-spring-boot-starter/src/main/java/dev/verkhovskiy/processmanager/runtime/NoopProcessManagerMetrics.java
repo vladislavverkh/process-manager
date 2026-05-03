@@ -90,5 +90,8 @@ public final class NoopProcessManagerMetrics implements ProcessManagerMetrics {
       String processType, ProcessCommandReason reason, Duration lag) {}
 
   @Override
+  public void recordRetentionCleanup(Duration duration, int deletedInstances, String outcome) {}
+
+  @Override
   public void recordOperatorOperation(String operation, String processType, String outcome) {}
 }

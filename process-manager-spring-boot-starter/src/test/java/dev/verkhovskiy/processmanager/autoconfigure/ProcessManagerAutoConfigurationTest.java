@@ -12,6 +12,7 @@ import dev.verkhovskiy.processmanager.ProcessOperator;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
 import dev.verkhovskiy.processmanager.runtime.ProcessManagerMetrics;
+import dev.verkhovskiy.processmanager.runtime.ProcessRetentionCleanup;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,7 @@ class ProcessManagerAutoConfigurationTest {
           assertThat(context).hasSingleBean(ProcessManager.class);
           assertThat(context).hasSingleBean(ProcessOperator.class);
           assertThat(context).hasSingleBean(ProcessDeadlineWatchdog.class);
+          assertThat(context).hasSingleBean(ProcessRetentionCleanup.class);
         });
   }
 
@@ -66,6 +68,7 @@ class ProcessManagerAutoConfigurationTest {
               assertThat(registry.find("process.manager.waits.active").gauge()).isNotNull();
               assertThat(registry.find("process.manager.events.unconsumed").gauge()).isNotNull();
               assertThat(registry.find("process.manager.deadline.overdue").gauge()).isNotNull();
+              assertThat(registry.find("process.manager.retention.expired").gauge()).isNotNull();
             });
   }
 }

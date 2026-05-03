@@ -14,6 +14,7 @@ import dev.verkhovskiy.processmanager.runtime.PostgresProcessManager;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessOperator;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
 import dev.verkhovskiy.processmanager.runtime.ProcessManagerMetrics;
+import dev.verkhovskiy.processmanager.runtime.ProcessRetentionCleanup;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -102,6 +103,19 @@ public class ProcessManagerAutoConfiguration {
         processRepository,
         commandScheduler,
         properties.getDeadlineBatchSize(),
+        metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE));
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  @ConditionalOnBean(PostgresProcessRepository.class)
+  ProcessRetentionCleanup processRetentionCleanup(
+      PostgresProcessRepository processRepository,
+      ProcessManagerProperties properties,
+      ObjectProvider<ProcessManagerMetrics> metrics) {
+    return new ProcessRetentionCleanup(
+        processRepository,
+        properties.getCleanupBatchSize(),
         metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE));
   }
 }

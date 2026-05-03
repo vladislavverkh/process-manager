@@ -64,5 +64,7 @@ public interface ProcessManagerMetrics {
 
   void recordDeadlineCommand(String processType, ProcessCommandReason reason, Duration lag);
 
+  void recordRetentionCleanup(Duration duration, int deletedInstances, String outcome);
+
   void recordOperatorOperation(String operation, String processType, String outcome);
 }

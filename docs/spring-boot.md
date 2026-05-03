@@ -26,6 +26,7 @@ ProcessManagerAutoConfiguration
 | `ProcessManager` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessOperator` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessDeadlineWatchdog` | Есть repository и scheduler |
+| `ProcessRetentionCleanup` | Есть `PostgresProcessRepository` |
 | `ProcessManagerMetrics` | Есть Micrometer `MeterRegistry` |
 | PostgreSQL-backed metrics gauges | Есть Micrometer `MeterRegistry` и `PostgresProcessRepository` |
 
@@ -46,7 +47,7 @@ process.manager
 | Свойство | Default | Назначение |
 | --- | --- | --- |
 | `process.manager.enabled` | `true` | Включает/отключает autoconfiguration |
-| `process.manager.cleanup-batch-size` | `100` | Batch size будущего retention cleanup |
+| `process.manager.cleanup-batch-size` | `100` | Batch size одного прохода retention cleanup |
 | `process.manager.deadline-batch-size` | `100` | Batch size одного прохода deadline watchdog |
 
 ## Регистрация process definitions
@@ -128,6 +129,20 @@ void processDeadlines() {
 }
 ```
 
+## Retention cleanup
+
+Starter создает bean `ProcessRetentionCleanup`. Он удаляет terminal instances, у которых
+`delete_after <= clock_timestamp()` в PostgreSQL:
+
+```java
+@Scheduled(fixedDelayString = "PT1M")
+void cleanupRetainedProcesses() {
+  processRetentionCleanup.runOnce();
+}
+```
+
+Размер батча задается через `process.manager.cleanup-batch-size`.
+
 ## Metrics
 
 При наличии Micrometer `MeterRegistry` starter публикует runtime metrics:
@@ -142,7 +157,9 @@ void processDeadlines() {
   `process.manager.events.consumed`, `process.manager.timers.scheduled`,
   `process.manager.timers.fired`, `process.manager.retries.scheduled`;
 - deadline/operator: `process.manager.deadline.scan.duration`,
-  `process.manager.deadline.commands.scheduled`, `process.manager.operator.operations`.
+  `process.manager.deadline.commands.scheduled`, `process.manager.retention.cleanup.runs`,
+  `process.manager.retention.cleanup.deleted`, `process.manager.retention.cleanup.duration`,
+  `process.manager.operator.operations`.
 
 Starter также регистрирует PostgreSQL-backed gauges:
 
@@ -150,6 +167,7 @@ Starter также регистрирует PostgreSQL-backed gauges:
 - `process.manager.waits.active`;
 - `process.manager.events.unconsumed`;
 - `process.manager.deadline.overdue`.
+- `process.manager.retention.expired`.
 
 Для Prometheus endpoint приложение должно подключить Actuator и Prometheus registry:
 

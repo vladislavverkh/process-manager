@@ -58,8 +58,13 @@
   - Micrometer runtime metrics;
   - metrics for stale, terminal and missing commands;
   - deadline watchdog metrics;
+  - retention cleanup metrics;
   - PostgreSQL-backed gauges for active instances, waits, unconsumed events and overdue deadlines;
   - Prometheus/Grafana setup in sample app.
+- Retention cleanup:
+  - scheduled cleanup runtime component;
+  - cleanup batch-size property;
+  - sample scheduled cleanup job.
 - Process definition validation:
   - required ACTION/WAIT/TERMINAL fields;
   - duplicate transition priorities;
@@ -86,12 +91,7 @@
    - aggregated summary по process instances;
    - alerting examples for Prometheus/Grafana.
 
-2. Retention job:
-   - scheduled cleanup terminal instances;
-   - cleanup metrics;
-   - batch-size property.
-
-3. Testkit:
+2. Testkit:
    - deterministic definition runner без PostgreSQL;
    - fake command scheduler.
 

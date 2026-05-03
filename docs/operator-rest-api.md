@@ -13,6 +13,18 @@ implementation("dev.verkhovskiy:process-manager-rest")
 Autoconfiguration включается только в web application context и требует beans `ProcessInspector` и
 `ProcessOperator`.
 
+## Свойства
+
+Префикс:
+
+```text
+process.manager.rest
+```
+
+| Свойство | Default | Назначение |
+| --- | --- | --- |
+| `process.manager.rest.enabled` | `true` | Включает/отключает autoconfiguration Operator REST API |
+
 Отключение:
 
 ```properties

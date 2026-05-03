@@ -64,6 +64,25 @@ Sample app запускает два scheduled runtime job:
 - deadline watchdog каждые `${sample.process-deadline-scan-delay:PT10S}`;
 - retention cleanup каждые `${sample.process-retention-cleanup-delay:PT1M}`.
 
+## Настройки
+
+Sample app использует стандартные Spring Boot свойства и два sample-specific свойства для
+scheduled jobs:
+
+| Свойство | Default | Назначение |
+| --- | --- | --- |
+| `spring.application.name` | `process-manager-sample-app` | Имя приложения и default tag `application` для metrics |
+| `spring.datasource.url` | `${SAMPLE_DB_URL:jdbc:postgresql://localhost:54320/process_manager_sample}` | JDBC URL PostgreSQL |
+| `spring.datasource.username` | `${SAMPLE_DB_USERNAME:process_manager}` | Пользователь PostgreSQL |
+| `spring.datasource.password` | `${SAMPLE_DB_PASSWORD:process_manager}` | Пароль PostgreSQL |
+| `server.port` | `${SAMPLE_SERVER_PORT:8080}` | HTTP port sample app |
+| `management.endpoints.web.exposure.include` | `health,info,metrics,prometheus` | Actuator endpoints, доступные по HTTP |
+| `management.endpoint.health.probes.enabled` | `true` | Включает liveness/readiness probes |
+| `management.metrics.tags.application` | `${spring.application.name}` | Общий tag `application` для metrics |
+| `process.manager.deadline-batch-size` | `50` | Batch size одного прохода deadline watchdog в sample app |
+| `sample.process-deadline-scan-delay` | `PT10S` | Fixed delay запуска deadline watchdog |
+| `sample.process-retention-cleanup-delay` | `PT1M` | Fixed delay запуска retention cleanup |
+
 Swagger UI:
 
 ```text

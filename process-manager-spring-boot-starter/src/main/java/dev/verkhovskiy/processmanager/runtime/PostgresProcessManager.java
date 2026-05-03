@@ -1,7 +1,6 @@
 package dev.verkhovskiy.processmanager.runtime;
 
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.deleteAfter;
-import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.statusForTarget;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.terminalInstanceStatus;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeStatuses.terminalStatus;
 import static dev.verkhovskiy.processmanager.runtime.ProcessRuntimeTiming.deadlineAt;
@@ -70,6 +69,7 @@ public class PostgresProcessManager implements ProcessManager {
   private final PostgresProcessRepository processRepository;
   private final ProcessCommandScheduler commandScheduler;
   private final ProcessRuntimeJson runtimeJson;
+  private final ProcessRuntimePersistence runtimePersistence;
   private final ProcessPayloadMapper payloadMapper;
   private final ProcessManagerMetrics metrics;
   private final TransitionSelector transitionSelector = new TransitionSelector();
@@ -111,6 +111,9 @@ public class PostgresProcessManager implements ProcessManager {
     this.payloadMapper =
         payloadMapper == null ? new JacksonProcessPayloadMapper(objectMapper) : payloadMapper;
     this.metrics = metrics == null ? NoopProcessManagerMetrics.INSTANCE : metrics;
+    this.runtimePersistence =
+        new ProcessRuntimePersistence(
+            processRepository, commandScheduler, runtimeJson, this.metrics);
   }
 
   @Override
@@ -356,7 +359,7 @@ public class PostgresProcessManager implements ProcessManager {
     TransitionDefinition<P> transition =
         transitionSelector.select(
             stateDefinition, transitionContext(actionState, result, null, now));
-    return applyTransition(
+    return runtimePersistence.applyTransition(
         definition,
         actionState,
         stateDefinition,
@@ -373,7 +376,7 @@ public class PostgresProcessManager implements ProcessManager {
     Instant now = Instant.now();
     TransitionDefinition<P> transition =
         transitionSelector.select(stateDefinition, transitionContext(state, null, null, now));
-    return applyTransition(
+    return runtimePersistence.applyTransition(
         definition, state, stateDefinition, transition, "DECISION", Map.of(), now);
   }
 
@@ -382,7 +385,8 @@ public class PostgresProcessManager implements ProcessManager {
       ProcessExecutionState<P> state,
       StateDefinition<P> stateDefinition) {
     if (state.status() != ProcessInstanceStatus.WAITING) {
-      return parkInWait(state, stateDefinition, "START", Map.of(), Instant.now());
+      return runtimePersistence.parkInWait(
+          state, stateDefinition, "START", Map.of(), Instant.now());
     }
 
     Instant now = Instant.now();
@@ -423,7 +427,8 @@ public class PostgresProcessManager implements ProcessManager {
       ProcessExecutionState<P> state,
       StateDefinition<P> stateDefinition) {
     if (state.status() != ProcessInstanceStatus.WAITING) {
-      return parkInTimer(definition, state, stateDefinition, "START", Map.of(), Instant.now());
+      return runtimePersistence.parkInTimer(
+          definition, state, stateDefinition, "START", Map.of(), Instant.now());
     }
     return state.park();
   }
@@ -445,7 +450,7 @@ public class PostgresProcessManager implements ProcessManager {
     TransitionDefinition<P> transition =
         transitionSelector.select(
             stateDefinition, transitionContext(triggeredState, null, event, now));
-    return applyTransition(
+    return runtimePersistence.applyTransition(
         definition, triggeredState, stateDefinition, transition, triggerType, trigger, now);
   }
 
@@ -463,7 +468,7 @@ public class PostgresProcessManager implements ProcessManager {
     Map<String, Object> trigger =
         processTimeoutTrigger(
             definition.processTimeoutTargetState(), state.processDeadlineAt(), now);
-    return applyTransition(
+    return runtimePersistence.applyTransition(
         definition,
         state.withVariables(
             state
@@ -490,7 +495,7 @@ public class PostgresProcessManager implements ProcessManager {
       if (stateDefinition.kind() == StateKind.TIMER) {
         return fireTimer(definition, state, stateDefinition, now);
       }
-      return applyTransition(
+      return runtimePersistence.applyTransition(
           definition,
           state.withVariables(
               state
@@ -516,7 +521,7 @@ public class PostgresProcessManager implements ProcessManager {
       Instant now) {
     Map<String, Object> trigger = timerTrigger(stateDefinition, state.stateDeadlineAt(), now);
     ProcessExecutionState<P> updated =
-        applyTransition(
+        runtimePersistence.applyTransition(
             definition,
             state.withVariables(
                 state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("TIMER", trigger))),
@@ -578,233 +583,6 @@ public class PostgresProcessManager implements ProcessManager {
         .withVariables(variables)
         .withState(stateDefinition.name(), terminalStatus, state.version() + 1, now, null)
         .park();
-  }
-
-  private <P> ProcessExecutionState<P> applyTransition(
-      ProcessDefinition<P> definition,
-      ProcessExecutionState<P> state,
-      StateDefinition<P> fromState,
-      TransitionDefinition<P> transition,
-      String triggerType,
-      Map<String, Object> trigger,
-      Instant now) {
-    StateDefinition<P> targetState = definition.state(transition.targetState());
-    ProcessInstanceStatus status = statusForTarget(targetState);
-    Instant stateEnteredAt = now;
-    Instant stateDeadlineAt = stateDeadlineAt(targetState, stateEnteredAt);
-    Instant completedAt = targetState.terminal() ? now : null;
-    Instant deleteAfter = targetState.terminal() ? deleteAfter(definition, status, now) : null;
-    int updated =
-        processRepository.updateExecutionState(
-            state.instanceId(),
-            state.version(),
-            targetState.name(),
-            status,
-            runtimeJson.toJson(state.variables().values()),
-            stateEnteredAt,
-            stateDeadlineAt,
-            completedAt,
-            deleteAfter);
-    if (updated == 0) {
-      recordOptimisticLockConflict(state);
-      return state.park();
-    }
-    if (fromState.kind() == StateKind.WAIT) {
-      processRepository.deleteWaits(state.instanceId());
-    }
-    processRepository.insertHistory(
-        new ProcessHistoryRecord(
-            UUID.randomUUID(),
-            state.instanceId(),
-            state.processType(),
-            fromState.name(),
-            targetState.name(),
-            transition.name(),
-            triggerType,
-            runtimeJson.toJson(trigger),
-            now));
-    metrics.recordTransition(
-        definition.processType(),
-        definition.version(),
-        fromState.name(),
-        targetState.name(),
-        transition.name(),
-        triggerType);
-    metrics.recordStateDuration(
-        definition.processType(), fromState.name(), durationBetween(state.stateEnteredAt(), now));
-    if (targetState.terminal()) {
-      metrics.recordProcessTerminal(
-          definition.processType(),
-          definition.version(),
-          targetState.name(),
-          status,
-          durationBetween(state.startedAt(), now));
-    }
-
-    ProcessExecutionState<P> updatedState =
-        state.withState(
-            targetState.name(), status, state.version() + 1, stateEnteredAt, stateDeadlineAt);
-    if (targetState.kind() == StateKind.WAIT) {
-      return registerWait(updatedState, targetState, now).park();
-    }
-    if (targetState.kind() == StateKind.TIMER) {
-      return scheduleTimer(definition, updatedState, targetState, now).park();
-    }
-    if (targetState.kind() == StateKind.TERMINAL) {
-      return updatedState.park();
-    }
-    return updatedState;
-  }
-
-  private <P> ProcessExecutionState<P> parkInWait(
-      ProcessExecutionState<P> state,
-      StateDefinition<P> stateDefinition,
-      String triggerType,
-      Map<String, Object> trigger,
-      Instant now) {
-    ProcessVariables variables =
-        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable(triggerType, trigger));
-    ProcessExecutionState<P> stateWithTrigger = state.withVariables(variables);
-    int updated =
-        processRepository.updateExecutionState(
-            stateWithTrigger.instanceId(),
-            stateWithTrigger.version(),
-            stateDefinition.name(),
-            ProcessInstanceStatus.WAITING,
-            runtimeJson.toJson(stateWithTrigger.variables().values()),
-            now,
-            stateDeadlineAt(stateDefinition, now),
-            null,
-            null);
-    if (updated == 0) {
-      recordOptimisticLockConflict(state);
-      return state.park();
-    }
-    insertHistory(
-        stateWithTrigger,
-        null,
-        stateDefinition.name(),
-        stateDefinition.name(),
-        triggerType,
-        trigger,
-        now);
-    metrics.recordTransition(
-        state.processType(),
-        state.definitionVersion(),
-        null,
-        stateDefinition.name(),
-        stateDefinition.name(),
-        triggerType);
-    return registerWait(
-            stateWithTrigger.withState(
-                stateDefinition.name(),
-                ProcessInstanceStatus.WAITING,
-                state.version() + 1,
-                now,
-                stateDeadlineAt(stateDefinition, now)),
-            stateDefinition,
-            now)
-        .park();
-  }
-
-  private <P> ProcessExecutionState<P> parkInTimer(
-      ProcessDefinition<P> definition,
-      ProcessExecutionState<P> state,
-      StateDefinition<P> stateDefinition,
-      String triggerType,
-      Map<String, Object> trigger,
-      Instant now) {
-    ProcessVariables variables =
-        state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable(triggerType, trigger));
-    ProcessExecutionState<P> stateWithTrigger = state.withVariables(variables);
-    Instant stateDeadlineAt = stateDeadlineAt(stateDefinition, now);
-    int updated =
-        processRepository.updateExecutionState(
-            stateWithTrigger.instanceId(),
-            stateWithTrigger.version(),
-            stateDefinition.name(),
-            ProcessInstanceStatus.WAITING,
-            runtimeJson.toJson(stateWithTrigger.variables().values()),
-            now,
-            stateDeadlineAt,
-            null,
-            null);
-    if (updated == 0) {
-      recordOptimisticLockConflict(state);
-      return state.park();
-    }
-    insertHistory(
-        stateWithTrigger,
-        null,
-        stateDefinition.name(),
-        stateDefinition.name(),
-        triggerType,
-        trigger,
-        now);
-    metrics.recordTransition(
-        state.processType(),
-        state.definitionVersion(),
-        null,
-        stateDefinition.name(),
-        stateDefinition.name(),
-        triggerType);
-    return scheduleTimer(
-            definition,
-            stateWithTrigger.withState(
-                stateDefinition.name(),
-                ProcessInstanceStatus.WAITING,
-                state.version() + 1,
-                now,
-                stateDeadlineAt),
-            stateDefinition,
-            now)
-        .park();
-  }
-
-  private <P> ProcessExecutionState<P> scheduleTimer(
-      ProcessDefinition<P> definition,
-      ProcessExecutionState<P> state,
-      StateDefinition<P> stateDefinition,
-      Instant now) {
-    Duration delay = stateDefinition.stateTimeout();
-    commandScheduler.scheduleDelayed(
-        new ProcessCommand(state.instanceId(), ProcessCommandReason.RESUME, state.version()),
-        partitionKey(definition.processType(), state.businessKey()),
-        delay);
-    processRepository.insertHistory(
-        new ProcessHistoryRecord(
-            UUID.randomUUID(),
-            state.instanceId(),
-            state.processType(),
-            state.state(),
-            state.state(),
-            "timer-scheduled",
-            "TIMER_SCHEDULED",
-            runtimeJson.toJson(timerTrigger(stateDefinition, state.stateDeadlineAt(), now)),
-            now));
-    metrics.recordTimerScheduled(definition.processType(), stateDefinition.name(), delay);
-    return state;
-  }
-
-  private <P> ProcessExecutionState<P> registerWait(
-      ProcessExecutionState<P> state, StateDefinition<P> stateDefinition, Instant now) {
-    String correlationKey =
-        stateDefinition.correlationKeyResolver().resolve(processContext(state, now));
-    Instant expiresAt =
-        stateDefinition.waitTimeout() == null ? null : now.plus(stateDefinition.waitTimeout());
-    processRepository.upsertWait(
-        new StoredProcessWait(
-            UUID.randomUUID(),
-            state.instanceId(),
-            state.processType(),
-            stateDefinition.name(),
-            stateDefinition.eventType(),
-            correlationKey,
-            expiresAt,
-            now));
-    metrics.recordWaitRegistered(
-        state.processType(), stateDefinition.name(), stateDefinition.eventType());
-    return state;
   }
 
   private <P> ProcessExecutionState<P> scheduleRetry(
@@ -876,7 +654,7 @@ public class PostgresProcessManager implements ProcessManager {
             .variables()
             .with(LAST_RETRY_VARIABLE, retryMetadata)
             .with(LAST_TRIGGER_VARIABLE, triggerVariable("RETRY_EXHAUSTED", retryMetadata));
-    return applyTransition(
+    return runtimePersistence.applyTransition(
         definition,
         state.withVariables(variables),
         stateDefinition,

@@ -65,7 +65,8 @@ Runtime обновляет variables после исполнения steps:
 - `_pm.lastEvent` хранит последнее внешнее событие, которое возобновило WAIT;
 - `_pm.lastRetry` хранит metadata последнего retry или retry exhaustion;
 - `_pm.lastTrigger` хранит последнюю причину продолжения процесса: `ACTION_RESULT`, `EVENT`,
-  `TIMER`, `PROCESS_TIMEOUT`, `STATE_TIMEOUT`, `RETRY`, `RETRY_EXHAUSTED` или `START`.
+  `TIMER`, `PROCESS_TIMEOUT`, `STATE_TIMEOUT`, `RETRY`, `RETRY_EXHAUSTED`, `MANUAL_CANCEL`,
+  `MANUAL_RETRY` или `START`.
 
 Служебный префикс `_pm.` зарезервирован runtime'ом. Пользовательские variables не должны
 использовать этот namespace.
@@ -197,11 +198,16 @@ History - это audit trail процесса. Она не должна испо
 
 - `cancel(instanceId, reason)` - переводит активный процесс в `CANCELLED`;
 - `scheduleResume(instanceId)` - планирует ручной `RESUME` с текущей `version`;
-- `scheduleRetry(instanceId)` - планирует ручной `RETRY` для процесса в статусе `RUNNING`.
+- `scheduleRetry(instanceId)` - сбрасывает retry-счетчики текущего state и планирует ручной
+  `RETRY` для процесса в статусе `RUNNING`.
 
 Отмена удаляет wait points, записывает history с `trigger_type = MANUAL_CANCEL`, сохраняет
 `_pm.lastCancel` и обновляет `_pm.lastTrigger`. Старые versioned commands станут stale после
 инкремента `version`, а unversioned resume commands игнорируются для terminal instances.
+Ручной retry удаляет `_pm.retry.<state>.attempt`, `_pm.retry.<state>` и `_pm.lastRetry`, сохраняет
+`_pm.lastTrigger.type = MANUAL_RETRY`, пишет history `manual-retry` и инкрементит `version`.
+Это позволяет оператору повторно запустить state после исчерпания автоматического retry budget, а
+старые delayed retry commands станут stale.
 
 ## Retention
 

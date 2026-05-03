@@ -140,17 +140,90 @@ class PostgresProcessOperatorTest {
   }
 
   @Test
-  void scheduleRetryUsesCurrentVersionForRunningInstance() {
+  void scheduleRetryDoesNotScheduleCommandWhenCounterResetConflicts() {
     PostgresProcessOperator operator = operator();
     when(processRepository.findInstanceForUpdate(INSTANCE_ID))
         .thenReturn(Optional.of(instance("SEND", ProcessInstanceStatus.RUNNING, 7)));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(7L),
+            eq("SEND"),
+            eq(ProcessInstanceStatus.RUNNING),
+            any(),
+            eq(STATE_ENTERED_AT),
+            eq(Instant.parse("2026-04-26T10:05:00Z")),
+            isNull(),
+            isNull()))
+        .thenReturn(0);
+
+    boolean scheduled = operator.scheduleRetry(INSTANCE_ID);
+
+    assertThat(scheduled).isFalse();
+    verifyNoInteractions(commandScheduler);
+    verify(processRepository, never()).insertHistory(any());
+  }
+
+  @Test
+  void scheduleRetryResetsRetryCountersAndUsesNextVersionForRunningInstance() throws Exception {
+    PostgresProcessOperator operator = operator();
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(
+            Optional.of(
+                instance(
+                    "SEND",
+                    ProcessInstanceStatus.RUNNING,
+                    7,
+                    """
+                    {
+                      "existing": true,
+                      "_pm.retry.SEND.attempt": 3,
+                      "_pm.retry.SEND": {"attempt": 3},
+                      "_pm.lastRetry": {"state": "SEND", "attempt": 3}
+                    }
+                    """)));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(7L),
+            eq("SEND"),
+            eq(ProcessInstanceStatus.RUNNING),
+            any(),
+            eq(STATE_ENTERED_AT),
+            eq(Instant.parse("2026-04-26T10:05:00Z")),
+            isNull(),
+            isNull()))
+        .thenReturn(1);
 
     boolean scheduled = operator.scheduleRetry(INSTANCE_ID);
 
     assertThat(scheduled).isTrue();
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(7L),
+            eq("SEND"),
+            eq(ProcessInstanceStatus.RUNNING),
+            variablesCaptor.capture(),
+            eq(STATE_ENTERED_AT),
+            eq(Instant.parse("2026-04-26T10:05:00Z")),
+            isNull(),
+            isNull());
+    Map<String, Object> variables = objectMapper.readValue(variablesCaptor.getValue(), mapType);
+    assertThat(variables)
+        .containsEntry("existing", true)
+        .doesNotContainKeys("_pm.retry.SEND.attempt", "_pm.retry.SEND", "_pm.lastRetry");
+    assertThat(nested(variables, "_pm.lastTrigger"))
+        .containsEntry("type", "MANUAL_RETRY")
+        .containsEntry("state", "SEND")
+        .containsEntry("resetRetry", true);
     verify(commandScheduler).schedule(commandCaptor.capture(), eq("payment:payment-1"));
     assertThat(commandCaptor.getValue())
-        .isEqualTo(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RETRY, 7));
+        .isEqualTo(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RETRY, 8));
+    verify(processRepository).insertHistory(historyCaptor.capture());
+    ProcessHistoryRecord history = historyCaptor.getValue();
+    assertThat(history.fromState()).isEqualTo("SEND");
+    assertThat(history.toState()).isEqualTo("SEND");
+    assertThat(history.transitionName()).isEqualTo("manual-retry");
+    assertThat(history.triggerType()).isEqualTo("MANUAL_RETRY");
   }
 
   private PostgresProcessOperator operator() {
@@ -178,6 +251,11 @@ class PostgresProcessOperatorTest {
 
   private static StoredProcessInstance instance(
       String state, ProcessInstanceStatus status, long version) {
+    return instance(state, status, version, "{\"existing\":true}");
+  }
+
+  private static StoredProcessInstance instance(
+      String state, ProcessInstanceStatus status, long version, String variablesJson) {
     return new StoredProcessInstance(
         INSTANCE_ID,
         "payment",
@@ -187,7 +265,7 @@ class PostgresProcessOperatorTest {
         state,
         status,
         "{\"paymentId\":\"pay-1\"}",
-        "{\"existing\":true}",
+        variablesJson,
         Instant.parse("2026-04-26T09:00:00Z"),
         Instant.parse("2026-04-26T09:00:00Z"),
         null,

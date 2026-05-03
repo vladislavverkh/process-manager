@@ -277,7 +277,7 @@ Runtime также сохраняет служебные variables:
 
 - `_pm.lastActionResult` - последний action result;
 - `_pm.lastEvent` - последнее внешнее событие, если процесс продолжился из WAIT;
-- `_pm.lastRetry` - metadata последнего запланированного retry;
+- `_pm.lastRetry` - metadata последнего retry или retry exhaustion;
 - `_pm.lastTrigger` - последняя причина продолжения процесса.
 
 ## Registry

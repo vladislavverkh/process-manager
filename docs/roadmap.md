@@ -50,7 +50,7 @@
 - Operator API:
   - cancel active process instance;
   - schedule manual resume;
-  - schedule manual retry for RUNNING instances.
+  - schedule manual retry for RUNNING instances and reset current state retry counters.
 - Operator REST API:
   - details and list endpoints for process instances;
   - manual cancel/resume/retry endpoints;
@@ -76,8 +76,7 @@
 ## Ближайший MVP
 
 1. Довести retry execution:
-   - document retry exhaustion semantics in more detail;
-   - decide whether manual retry should reset exhausted retry counters.
+   - document retry exhaustion semantics in more detail.
 
 2. Довести payload mapper:
    - validation error handling;

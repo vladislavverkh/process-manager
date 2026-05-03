@@ -118,7 +118,9 @@ processOperator.scheduleRetry(instanceId);
 
 `cancel(...)` переводит только активный процесс в `CANCELLED`, удаляет wait points и пишет history
 с trigger type `MANUAL_CANCEL`. `scheduleResume(...)` и `scheduleRetry(...)` ставят command в очередь
-с текущей `version`, поэтому команда станет stale, если процесс успеет измениться раньше.
+с актуальной `version`, поэтому команда станет stale, если процесс успеет измениться раньше.
+`scheduleRetry(...)` дополнительно сбрасывает retry-счетчики текущего state и пишет history
+`manual-retry` с trigger type `MANUAL_RETRY`.
 
 ## Deadline watchdog
 

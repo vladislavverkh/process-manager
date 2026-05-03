@@ -89,4 +89,4 @@ POST /process-manager/processes/{instanceId}/retry
 ```
 
 Успешное планирование команды возвращает `202`. Retry допускается только для процессов в статусе
-`RUNNING`.
+`RUNNING`. Операция сбрасывает retry-счетчики текущего state и планирует command с новой `version`.

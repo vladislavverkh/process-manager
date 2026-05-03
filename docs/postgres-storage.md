@@ -86,7 +86,7 @@ process-manager-postgres/src/main/resources/db/changelog/process-manager.postgre
 | `from_state` | Предыдущее состояние |
 | `to_state` | Новое состояние |
 | `transition_name` | Имя выбранного transition |
-| `trigger_type` | `ACTION_RESULT`, `EVENT`, `TIMER`, `MANUAL`, ... |
+| `trigger_type` | `ACTION_RESULT`, `EVENT`, `TIMER`, `RETRY`, `RETRY_EXHAUSTED`, `MANUAL_CANCEL`, `MANUAL_RETRY`, ... |
 | `trigger_json` | Structured trigger data |
 | `created_at` | Время записи |
 

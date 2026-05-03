@@ -32,6 +32,8 @@ public class PostgresProcessOperator implements ProcessOperator {
 
   private static final String LAST_TRIGGER_VARIABLE = "_pm.lastTrigger";
   private static final String LAST_CANCEL_VARIABLE = "_pm.lastCancel";
+  private static final String LAST_RETRY_VARIABLE = "_pm.lastRetry";
+  private static final String RETRY_ATTEMPT_VARIABLE_PREFIX = "_pm.retry.";
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private final ProcessDefinitionRegistry definitionRegistry;
@@ -151,7 +153,7 @@ public class PostgresProcessOperator implements ProcessOperator {
   @Override
   @Transactional
   public boolean scheduleRetry(UUID instanceId) {
-    return scheduleActiveCommand(instanceId, ProcessCommandReason.RETRY, true);
+    return scheduleManualRetry(instanceId);
   }
 
   private boolean scheduleActiveCommand(
@@ -185,6 +187,80 @@ public class PostgresProcessOperator implements ProcessOperator {
     }
   }
 
+  private boolean scheduleManualRetry(UUID instanceId) {
+    String processType = "unknown";
+    String outcome = "error";
+    try {
+      Optional<StoredProcessInstance> found = processRepository.findInstanceForUpdate(instanceId);
+      if (found.isEmpty()) {
+        outcome = "not_found";
+        return false;
+      }
+      StoredProcessInstance instance = found.get();
+      processType = instance.processType();
+      if (terminalStatus(instance.status())) {
+        outcome = "terminal";
+        return false;
+      }
+      if (instance.status() != ProcessInstanceStatus.RUNNING) {
+        outcome = "not_running";
+        return false;
+      }
+
+      Instant now = Instant.now();
+      Map<String, Object> trigger = manualRetryTrigger(instance.state(), now);
+      ProcessVariables variables =
+          new ProcessVariables(readMap(instance.variablesJson(), "process variables"))
+              .without(retryAttemptVariable(instance.state()))
+              .without(retryMetadataVariable(instance.state()))
+              .without(LAST_RETRY_VARIABLE)
+              .with(LAST_TRIGGER_VARIABLE, triggerVariable("MANUAL_RETRY", trigger));
+      int updated =
+          processRepository.updateExecutionState(
+              instance.instanceId(),
+              instance.version(),
+              instance.state(),
+              ProcessInstanceStatus.RUNNING,
+              toJson(variables.values()),
+              instance.stateEnteredAt(),
+              instance.stateDeadlineAt(),
+              null,
+              null);
+      if (updated == 0) {
+        metrics.recordOptimisticLockConflict(instance.processType(), instance.state());
+        outcome = "conflict";
+        return false;
+      }
+
+      long nextVersion = instance.version() + 1;
+      commandScheduler.schedule(
+          new ProcessCommand(instance.instanceId(), ProcessCommandReason.RETRY, nextVersion),
+          partitionKey(instance.processType(), instance.businessKey()));
+      processRepository.insertHistory(
+          new ProcessHistoryRecord(
+              UUID.randomUUID(),
+              instance.instanceId(),
+              instance.processType(),
+              instance.state(),
+              instance.state(),
+              "manual-retry",
+              "MANUAL_RETRY",
+              toJson(trigger),
+              now));
+      metrics.recordTransition(
+          instance.processType(),
+          instance.definitionVersion(),
+          instance.state(),
+          instance.state(),
+          "manual-retry",
+          "MANUAL_RETRY");
+      outcome = "scheduled";
+      return true;
+    } finally {
+      metrics.recordOperatorOperation("schedule_retry", processType, outcome);
+    }
+  }
+
   private Map<String, Object> readMap(String json, String valueName) {
     if (json == null || json.isBlank()) {
       return Map.of();
@@ -213,6 +289,14 @@ public class PostgresProcessOperator implements ProcessOperator {
     return Map.copyOf(trigger);
   }
 
+  private static Map<String, Object> manualRetryTrigger(String state, Instant scheduledAt) {
+    Map<String, Object> trigger = new LinkedHashMap<>();
+    trigger.put("state", state);
+    trigger.put("resetRetry", true);
+    trigger.put("scheduledAt", scheduledAt.toString());
+    return Map.copyOf(trigger);
+  }
+
   private static Map<String, Object> triggerVariable(
       String triggerType, Map<String, Object> trigger) {
     Map<String, Object> value = new LinkedHashMap<>();
@@ -225,6 +309,14 @@ public class PostgresProcessOperator implements ProcessOperator {
     return status == ProcessInstanceStatus.COMPLETED
         || status == ProcessInstanceStatus.FAILED
         || status == ProcessInstanceStatus.CANCELLED;
+  }
+
+  private static String retryAttemptVariable(String state) {
+    return RETRY_ATTEMPT_VARIABLE_PREFIX + state + ".attempt";
+  }
+
+  private static String retryMetadataVariable(String state) {
+    return RETRY_ATTEMPT_VARIABLE_PREFIX + state;
   }
 
   private static Instant deleteAfter(

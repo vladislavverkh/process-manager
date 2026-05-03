@@ -20,7 +20,8 @@ public interface ProcessOperator {
   boolean scheduleResume(UUID instanceId);
 
   /**
-   * Планирует ручной повтор текущего RUNNING-состояния через очередь команд.
+   * Сбрасывает retry-счетчики текущего RUNNING-состояния и планирует ручной повтор через очередь
+   * команд.
    *
    * @return {@code true}, если команда была запланирована
    */

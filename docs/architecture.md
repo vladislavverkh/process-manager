@@ -14,7 +14,7 @@
 | `process-manager-task-queue` | Опциональный adapter-код для приложений, которые явно связывают process-manager и `task-queue-postgres` |
 | `process-manager-spring-boot-starter` | Autoconfiguration runtime-компонентов |
 | `process-manager-rest` | REST endpoints для диагностики и ручных операторских действий |
-| `process-manager-testkit` | Assertions/helpers для тестирования process definitions |
+| `process-manager-testkit` | Assertions, deterministic runner без PostgreSQL и fake scheduler для unit-тестов process definitions |
 
 ## Компоненты
 

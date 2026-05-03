@@ -78,7 +78,10 @@
   - duplicate transition priorities;
   - unreachable states;
   - path from reachable states to terminal states.
-- Basic testkit assertions for process definitions.
+- Testkit:
+  - assertions for process definitions;
+  - deterministic runner без PostgreSQL;
+  - fake command scheduler.
 
 ## Ближайший MVP
 
@@ -97,10 +100,6 @@
 1. Admin/observability:
    - aggregated summary по process instances;
    - alerting examples for Prometheus/Grafana.
-
-2. Testkit:
-   - deterministic definition runner без PostgreSQL;
-   - fake command scheduler.
 
 ## Позже
 

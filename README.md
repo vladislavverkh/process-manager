@@ -25,7 +25,8 @@ Kafka, scheduler в другой БД или собственный executor.
   `variables_json`;
 - есть process/state deadlines и watchdog, который планирует timeout-команды только после
   фактического истечения дедлайна;
-- есть структурная валидация process definitions и базовый testkit для проверок графа;
+- есть структурная валидация process definitions, deterministic test runner без PostgreSQL и fake
+  command scheduler;
 - есть идемпотентный повторный `start` для активного business key и optional idempotency key для
   `signal`;
 - есть `ProcessInspector` для чтения instance, wait points и history без изменения процесса;
@@ -60,7 +61,7 @@ Kafka, scheduler в другой БД или собственный executor.
 - `process-manager-spring-boot-starter` - Spring Boot autoconfiguration.
 - `process-manager-rest` - REST API для диагностики и ручных операторских действий.
 - `process-manager-sample-app` - пример приложения с процессом обработки транзакции, PostgreSQL и REST API.
-- `process-manager-testkit` - test helpers для process definitions.
+- `process-manager-testkit` - assertions, deterministic runner и fake scheduler для unit-тестов.
 
 ## Локальная сборка
 

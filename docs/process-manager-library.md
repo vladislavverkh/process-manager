@@ -16,13 +16,49 @@
 
 ## Testkit
 
-Модуль `process-manager-testkit` содержит assertions для проверки process definitions в unit-тестах:
+Модуль `process-manager-testkit` содержит assertions, deterministic runner без PostgreSQL и fake
+command scheduler для unit-тестов клиентских process definitions:
 
 ```java
 ProcessDefinitionAssertions.assertThat(payment)
     .isValid()
     .hasState("SEND_PAYMENT", StateKind.ACTION)
     .canReachTerminal("DONE");
+```
+
+`DeterministicProcessRunner` позволяет стартовать payload, вручную исполнять `ACTION`/`DECISION`,
+доставлять event в `WAIT`, срабатывать `TIMER`/timeout и проверять state, status, history и
+variables без Docker/PostgreSQL:
+
+```java
+DeterministicProcessRunner<PaymentPayload> runner =
+    DeterministicProcessRunner.start(payment, "payment-1", new PaymentPayload("payment-1"));
+
+runner.runUntilBlocked();
+
+assertThat(runner.state()).isEqualTo("WAIT_PAYMENT_RESULT");
+assertThat(runner.variables().values()).containsEntry("providerPaymentId", "provider-1");
+
+runner.signal("payment.result", "payment-1", Map.of("approved", true));
+
+assertThat(runner.status()).isEqualTo(ProcessInstanceStatus.COMPLETED);
+assertThat(runner.history())
+    .extracting(TestProcessHistoryRecord::transitionName)
+    .containsExactly("accepted", "approved");
+```
+
+`FakeProcessCommandScheduler` записывает немедленные и delayed команды в память, чтобы в тестах
+проверять retry/timer/deadline scheduling без реальной очереди:
+
+```java
+FakeProcessCommandScheduler scheduler = new FakeProcessCommandScheduler();
+
+scheduler.scheduleDelayed(
+    new ProcessCommand(instanceId, ProcessCommandReason.RETRY, 2),
+    "payment:payment-1",
+    Duration.ofSeconds(5));
+
+assertThat(scheduler.lastCommand().delay()).isEqualTo(Duration.ofSeconds(5));
 ```
 
 ## Что где смотреть

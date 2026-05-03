@@ -307,6 +307,10 @@ public class PostgresProcessManager implements ProcessManager {
         && canRetry(state, stateDefinition)) {
       return scheduleRetry(definition, actionState, stateDefinition, result, now);
     }
+    if (result.baseResult() instanceof StepResult.RetryableFailure
+        && stateDefinition.retryExhaustedTargetState() != null) {
+      return applyRetryExhaustedTransition(definition, actionState, stateDefinition, result, now);
+    }
 
     if (!(result.baseResult() instanceof StepResult.RetryableFailure)) {
       variables =
@@ -432,7 +436,7 @@ public class PostgresProcessManager implements ProcessManager {
                 .variables()
                 .with(LAST_TRIGGER_VARIABLE, triggerVariable("PROCESS_TIMEOUT", trigger))),
         stateDefinition,
-        timeoutTransition("process-timeout", definition.processTimeoutTargetState()),
+        syntheticTransition("process-timeout", definition.processTimeoutTargetState()),
         "PROCESS_TIMEOUT",
         trigger,
         now);
@@ -459,7 +463,7 @@ public class PostgresProcessManager implements ProcessManager {
                   .variables()
                   .with(LAST_TRIGGER_VARIABLE, triggerVariable("STATE_TIMEOUT", trigger))),
           stateDefinition,
-          timeoutTransition("state-timeout", stateDefinition.timeoutTargetState()),
+          syntheticTransition("state-timeout", stateDefinition.timeoutTargetState()),
           "STATE_TIMEOUT",
           trigger,
           now);
@@ -483,7 +487,7 @@ public class PostgresProcessManager implements ProcessManager {
             state.withVariables(
                 state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("TIMER", trigger))),
             stateDefinition,
-            timeoutTransition("timer-fired", stateDefinition.timeoutTargetState()),
+            syntheticTransition("timer-fired", stateDefinition.timeoutTargetState()),
             "TIMER",
             trigger,
             now);
@@ -825,6 +829,28 @@ public class PostgresProcessManager implements ProcessManager {
     return state.withVariables(variables).withVersion(nextVersion).park();
   }
 
+  private <P> ExecutionState<P> applyRetryExhaustedTransition(
+      ProcessDefinition<P> definition,
+      ExecutionState<P> state,
+      StateDefinition<P> stateDefinition,
+      StepResult result,
+      Instant now) {
+    Map<String, Object> retryMetadata = retryExhaustedTrigger(state, stateDefinition, result);
+    ProcessVariables variables =
+        state
+            .variables()
+            .with(LAST_RETRY_VARIABLE, retryMetadata)
+            .with(LAST_TRIGGER_VARIABLE, triggerVariable("RETRY_EXHAUSTED", retryMetadata));
+    return applyTransition(
+        definition,
+        state.withVariables(variables),
+        stateDefinition,
+        syntheticTransition("retry-exhausted", stateDefinition.retryExhaustedTargetState()),
+        "RETRY_EXHAUSTED",
+        retryMetadata,
+        now);
+  }
+
   private <P> boolean canRetry(ExecutionState<P> state, StateDefinition<P> stateDefinition) {
     return retryAttempt(state, stateDefinition) < stateDefinition.retryPolicy().maxAttempts();
   }
@@ -1062,6 +1088,17 @@ public class PostgresProcessManager implements ProcessManager {
     return Map.copyOf(retry);
   }
 
+  private static Map<String, Object> retryExhaustedTrigger(
+      ExecutionState<?> state, StateDefinition<?> stateDefinition, StepResult result) {
+    Map<String, Object> retry = new LinkedHashMap<>();
+    retry.put("state", stateDefinition.name());
+    retry.put("attempt", retryAttemptValue(state, stateDefinition));
+    retry.put("maxAttempts", stateDefinition.retryPolicy().maxAttempts());
+    retry.put("targetState", stateDefinition.retryExhaustedTargetState());
+    retry.put("failure", actionTrigger(result));
+    return Map.copyOf(retry);
+  }
+
   private static Map<String, Object> triggerVariable(
       String triggerType, Map<String, Object> trigger) {
     Map<String, Object> value = new LinkedHashMap<>();
@@ -1070,8 +1107,13 @@ public class PostgresProcessManager implements ProcessManager {
     return Map.copyOf(value);
   }
 
-  private static <P> TransitionDefinition<P> timeoutTransition(String name, String targetState) {
+  private static <P> TransitionDefinition<P> syntheticTransition(String name, String targetState) {
     return new TransitionDefinition<>(name, targetState, Integer.MIN_VALUE, context -> true);
+  }
+
+  private static int retryAttemptValue(
+      ExecutionState<?> state, StateDefinition<?> stateDefinition) {
+    return state.variables().integer(retryAttemptVariable(stateDefinition.name())).orElse(0);
   }
 
   private static Instant deadlineAt(Instant start, Duration timeout) {

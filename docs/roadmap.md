@@ -35,6 +35,7 @@
   - schedule timeout commands from deadline watchdog only after deadline expiration;
   - register `WAIT`;
   - evaluate `DECISION`;
+  - route retry exhaustion through explicit `retryExhaustedTargetState`;
   - enter terminal state;
   - write history;
   - skip stale commands by `expectedVersion`.
@@ -75,8 +76,8 @@
 ## Ближайший MVP
 
 1. Довести retry execution:
-   - route exhausted retry outcomes;
-   - document retry exhaustion semantics.
+   - document retry exhaustion semantics in more detail;
+   - decide whether manual retry should reset exhausted retry counters.
 
 2. Довести payload mapper:
    - validation error handling;

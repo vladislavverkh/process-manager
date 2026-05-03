@@ -736,6 +736,85 @@ class PostgresProcessManagerTest {
   }
 
   @Test
+  void retryExhaustionTransitionsToConfiguredState() throws Exception {
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .version(1)
+            .payloadSchemaVersion(1)
+            .initialState("SEND")
+            .actionState(
+                "SEND",
+                state ->
+                    state
+                        .action(
+                            ctx ->
+                                StepResult.retryableFailure("TEMPORARY_ERROR", "temporary outage"))
+                        .retry(
+                            RetryPolicy.exponential(
+                                1, Duration.ofSeconds(1), Duration.ofSeconds(10)))
+                        .retryExhaustedTargetState("FAILED")
+                        .otherwise("DONE"))
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .terminalState("FAILED", ProcessInstanceStatus.FAILED)
+            .build();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(
+            Optional.of(
+                instance(
+                    "SEND",
+                    ProcessInstanceStatus.RUNNING,
+                    3,
+                    null,
+                    Instant.parse("2026-04-26T10:00:00Z"),
+                    null,
+                    "{\"_pm.retry.SEND.attempt\":1}")));
+    when(processRepository.updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(3L),
+            eq("FAILED"),
+            eq(ProcessInstanceStatus.FAILED),
+            any(),
+            any(),
+            isNull(),
+            any(),
+            any()))
+        .thenReturn(1);
+
+    manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.RETRY, 3));
+
+    verify(commandScheduler, never()).scheduleDelayed(any(), any(), any());
+    verify(processRepository).insertHistory(historyCaptor.capture());
+    ProcessHistoryRecord history = historyCaptor.getValue();
+    assertThat(history.fromState()).isEqualTo("SEND");
+    assertThat(history.toState()).isEqualTo("FAILED");
+    assertThat(history.transitionName()).isEqualTo("retry-exhausted");
+    assertThat(history.triggerType()).isEqualTo("RETRY_EXHAUSTED");
+    assertThat(history.triggerJson())
+        .contains("\"targetState\":\"FAILED\"")
+        .contains("\"code\":\"TEMPORARY_ERROR\"");
+    verify(processRepository)
+        .updateExecutionState(
+            eq(INSTANCE_ID),
+            eq(3L),
+            eq("FAILED"),
+            eq(ProcessInstanceStatus.FAILED),
+            variablesCaptor.capture(),
+            any(),
+            isNull(),
+            any(),
+            any());
+    Map<String, Object> variables = jsonMap(variablesCaptor.getValue());
+    assertThat(nested(variables, "_pm.lastTrigger"))
+        .containsEntry("type", "RETRY_EXHAUSTED")
+        .containsEntry("targetState", "FAILED")
+        .containsEntry("attempt", 1);
+    assertThat(nested(variables, "_pm.lastRetry"))
+        .containsEntry("targetState", "FAILED")
+        .containsEntry("maxAttempts", 1);
+  }
+
+  @Test
   void skipsStaleCommand() {
     ProcessDefinition<PaymentPayload> definition =
         ProcessDefinition.builder("payment", PaymentPayload.class)
@@ -802,6 +881,18 @@ class PostgresProcessManagerTest {
       Instant processDeadlineAt,
       Instant stateEnteredAt,
       Instant stateDeadlineAt) {
+    return instance(
+        state, status, version, processDeadlineAt, stateEnteredAt, stateDeadlineAt, "{}");
+  }
+
+  private static StoredProcessInstance instance(
+      String state,
+      ProcessInstanceStatus status,
+      long version,
+      Instant processDeadlineAt,
+      Instant stateEnteredAt,
+      Instant stateDeadlineAt,
+      String variablesJson) {
     return new StoredProcessInstance(
         INSTANCE_ID,
         "payment",
@@ -811,7 +902,7 @@ class PostgresProcessManagerTest {
         state,
         status,
         "{\"paymentId\":\"pay-1\"}",
-        "{}",
+        variablesJson,
         Instant.parse("2026-04-26T10:00:00Z"),
         Instant.parse("2026-04-26T10:00:00Z"),
         processDeadlineAt,

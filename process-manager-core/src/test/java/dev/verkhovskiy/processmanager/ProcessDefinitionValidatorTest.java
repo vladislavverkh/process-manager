@@ -164,6 +164,45 @@ class ProcessDefinitionValidatorTest {
         .hasMessageContaining("TIMER_WITH_TRANSITIONS[WAIT_BEFORE_POLL]");
   }
 
+  @Test
+  void rejectsUnknownRetryExhaustedTarget() {
+    assertThatThrownBy(
+            () ->
+                ProcessDefinition.builder("payment", PaymentPayload.class)
+                    .initialState("SEND")
+                    .actionState(
+                        "SEND",
+                        state ->
+                            state
+                                .action(ctx -> StepResult.retryableFailure("TEMPORARY_ERROR", ""))
+                                .retryExhaustedTargetState("PARKED")
+                                .otherwise("DONE"))
+                    .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+                    .build())
+        .isInstanceOf(ProcessDefinitionException.class)
+        .hasMessageContaining("UNKNOWN_RETRY_EXHAUSTED_TARGET[SEND]");
+  }
+
+  @Test
+  void rejectsRetryExhaustedTargetOnNonActionState() {
+    assertThatThrownBy(
+            () ->
+                ProcessDefinition.builder("payment", PaymentPayload.class)
+                    .initialState("WAIT_RESULT")
+                    .waitState(
+                        "WAIT_RESULT",
+                        state ->
+                            state
+                                .eventType("payment.result")
+                                .correlationKey(ctx -> ctx.payload().paymentId())
+                                .retryExhaustedTargetState("DONE")
+                                .otherwise("DONE"))
+                    .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+                    .build())
+        .isInstanceOf(ProcessDefinitionException.class)
+        .hasMessageContaining("RETRY_EXHAUSTED_TARGET_ON_NON_ACTION[WAIT_RESULT]");
+  }
+
   private static StateDefinition<PaymentPayload> terminal(String name) {
     return new StateDefinition<>(
         name,

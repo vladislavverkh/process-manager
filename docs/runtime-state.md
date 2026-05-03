@@ -63,9 +63,9 @@ Runtime обновляет variables после исполнения steps:
   variables;
 - `_pm.lastActionResult` хранит последний результат action;
 - `_pm.lastEvent` хранит последнее внешнее событие, которое возобновило WAIT;
-- `_pm.lastRetry` хранит metadata последнего запланированного retry;
+- `_pm.lastRetry` хранит metadata последнего retry или retry exhaustion;
 - `_pm.lastTrigger` хранит последнюю причину продолжения процесса: `ACTION_RESULT`, `EVENT`,
-  `TIMER`, `PROCESS_TIMEOUT`, `STATE_TIMEOUT`, `RETRY` или `START`.
+  `TIMER`, `PROCESS_TIMEOUT`, `STATE_TIMEOUT`, `RETRY`, `RETRY_EXHAUSTED` или `START`.
 
 Служебный префикс `_pm.` зарезервирован runtime'ом. Пользовательские variables не должны
 использовать этот namespace.

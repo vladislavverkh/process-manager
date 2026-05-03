@@ -14,6 +14,7 @@ public record StateDefinition<P>(
     Duration stateTimeout,
     String timeoutTargetState,
     RetryPolicy retryPolicy,
+    String retryExhaustedTargetState,
     ProcessInstanceStatus terminalStatus,
     List<TransitionDefinition<P>> transitions) {
 
@@ -30,8 +31,38 @@ public record StateDefinition<P>(
     if (timeoutTargetState != null && timeoutTargetState.isBlank()) {
       throw new IllegalArgumentException("timeoutTargetState must not be blank");
     }
+    if (retryExhaustedTargetState != null && retryExhaustedTargetState.isBlank()) {
+      throw new IllegalArgumentException("retryExhaustedTargetState must not be blank");
+    }
     retryPolicy = retryPolicy == null ? RetryPolicy.none() : retryPolicy;
     transitions = List.copyOf(transitions == null ? List.of() : transitions);
+  }
+
+  public StateDefinition(
+      String name,
+      StateKind kind,
+      ProcessAction<P> action,
+      String eventType,
+      CorrelationKeyResolver<P> correlationKeyResolver,
+      Duration waitTimeout,
+      Duration stateTimeout,
+      String timeoutTargetState,
+      RetryPolicy retryPolicy,
+      ProcessInstanceStatus terminalStatus,
+      List<TransitionDefinition<P>> transitions) {
+    this(
+        name,
+        kind,
+        action,
+        eventType,
+        correlationKeyResolver,
+        waitTimeout,
+        stateTimeout,
+        timeoutTargetState,
+        retryPolicy,
+        null,
+        terminalStatus,
+        transitions);
   }
 
   /** Возвращает true, если это финальное состояние. */

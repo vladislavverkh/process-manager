@@ -1,4 +1,4 @@
- package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample;
 
 import dev.verkhovskiy.processmanager.runtime.ProcessRetentionCleanup;
 import org.springframework.context.annotation.DependsOn;

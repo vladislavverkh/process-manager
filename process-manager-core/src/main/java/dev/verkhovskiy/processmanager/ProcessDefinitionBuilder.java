@@ -169,6 +169,7 @@ public final class ProcessDefinitionBuilder<P> {
     private Duration stateTimeout;
     private String timeoutTargetState;
     private RetryPolicy retryPolicy = RetryPolicy.none();
+    private String retryExhaustedTargetState;
     private ProcessInstanceStatus terminalStatus;
 
     private StateBuilder(String name, StateKind kind) {
@@ -178,6 +179,11 @@ public final class ProcessDefinitionBuilder<P> {
 
     public StateBuilder<P> retry(RetryPolicy retryPolicy) {
       this.retryPolicy = retryPolicy;
+      return this;
+    }
+
+    public StateBuilder<P> retryExhaustedTargetState(String targetState) {
+      this.retryExhaustedTargetState = targetState;
       return this;
     }
 
@@ -290,6 +296,7 @@ public final class ProcessDefinitionBuilder<P> {
           stateTimeout,
           timeoutTargetState,
           retryPolicy,
+          retryExhaustedTargetState,
           terminalStatus,
           transitions);
     }

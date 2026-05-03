@@ -83,6 +83,7 @@ public final class ProcessDefinitionValidator {
     }
     validateTransitions(definition, stateName, state, problems);
     validateTimeoutTargetHasTimeout(stateName, state, problems);
+    validateRetryExhaustedTarget(stateName, state, problems);
   }
 
   private static void validateActionState(
@@ -239,6 +240,17 @@ public final class ProcessDefinitionValidator {
     }
   }
 
+  private static void validateRetryExhaustedTarget(
+      String stateName, StateDefinition<?> state, List<ProcessDefinitionProblem> problems) {
+    if (state.retryExhaustedTargetState() != null && state.kind() != StateKind.ACTION) {
+      problems.add(
+          ProcessDefinitionProblem.state(
+              "RETRY_EXHAUSTED_TARGET_ON_NON_ACTION",
+              stateName,
+              state.kind() + " state must not define retryExhaustedTargetState"));
+    }
+  }
+
   private static void validateTransitions(
       ProcessDefinition<?> definition,
       String stateName,
@@ -274,6 +286,14 @@ public final class ProcessDefinitionValidator {
               "UNKNOWN_TIMEOUT_TARGET",
               stateName,
               "Timeout points to unknown state " + state.timeoutTargetState()));
+    }
+    if (state.retryExhaustedTargetState() != null
+        && !definition.states().containsKey(state.retryExhaustedTargetState())) {
+      problems.add(
+          ProcessDefinitionProblem.state(
+              "UNKNOWN_RETRY_EXHAUSTED_TARGET",
+              stateName,
+              "Retry exhaustion points to unknown state " + state.retryExhaustedTargetState()));
     }
   }
 
@@ -357,6 +377,10 @@ public final class ProcessDefinitionValidator {
     if (state.timeoutTargetState() != null
         && definition.states().containsKey(state.timeoutTargetState())) {
       targets.add(state.timeoutTargetState());
+    }
+    if (state.retryExhaustedTargetState() != null
+        && definition.states().containsKey(state.retryExhaustedTargetState())) {
+      targets.add(state.retryExhaustedTargetState());
     }
     if (definition.processTimeoutTargetState() != null
         && definition.states().containsKey(definition.processTimeoutTargetState())) {

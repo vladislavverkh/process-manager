@@ -21,6 +21,10 @@ class ProcessDefinitionBuilderTest {
                 state ->
                     state
                         .action(ctx -> StepResult.success("ACCEPTED"))
+                        .retry(
+                            RetryPolicy.exponential(
+                                2, Duration.ofSeconds(1), Duration.ofSeconds(5)))
+                        .retryExhaustedTargetState("TECHNICAL_FAILURE")
                         .timeout(
                             timeout ->
                                 timeout
@@ -57,6 +61,8 @@ class ProcessDefinitionBuilderTest {
     assertThat(definition.processTimeoutTargetState()).isEqualTo("TECHNICAL_FAILURE");
     assertThat(definition.state("SEND").stateTimeout()).isEqualTo(Duration.ofMinutes(10));
     assertThat(definition.state("SEND").timeoutTargetState()).isEqualTo("TECHNICAL_FAILURE");
+    assertThat(definition.state("SEND").retryPolicy().maxAttempts()).isEqualTo(2);
+    assertThat(definition.state("SEND").retryExhaustedTargetState()).isEqualTo("TECHNICAL_FAILURE");
     assertThat(definition.state("WAIT_BEFORE_RESULT_POLL").kind()).isEqualTo(StateKind.TIMER);
     assertThat(definition.state("WAIT_BEFORE_RESULT_POLL").stateTimeout())
         .isEqualTo(Duration.ofSeconds(30));

@@ -145,21 +145,13 @@ public class TransactionProcessConfiguration {
                 state
                     .action(actions::lookupClient)
                     .retry(REST_RETRY)
+                    .retryExhaustedTargetState("PARKED_TEMPORARY_FAILURE")
                     .transition(
                         transition ->
                             transition
                                 .name("client-found")
                                 .targetState("LOOKUP_CONTRACT")
                                 .condition(ctx -> ctx.resultCodeEquals("CLIENT_FOUND")))
-                    .transition(
-                        transition ->
-                            transition
-                                .name("temporary-client-error")
-                                .targetState("PARKED_TEMPORARY_FAILURE")
-                                .condition(
-                                    ctx ->
-                                        ctx.resultCodeEquals(
-                                            "CLIENT_SERVICE_TEMPORARY_UNAVAILABLE")))
                     .transition(
                         transition ->
                             transition
@@ -173,21 +165,13 @@ public class TransactionProcessConfiguration {
                 state
                     .action(actions::lookupContract)
                     .retry(REST_RETRY)
+                    .retryExhaustedTargetState("PARKED_TEMPORARY_FAILURE")
                     .transition(
                         transition ->
                             transition
                                 .name("contract-found")
                                 .targetState("BUILD_TRANSACTION_ACTIONS")
                                 .condition(ctx -> ctx.resultCodeEquals("CONTRACT_FOUND")))
-                    .transition(
-                        transition ->
-                            transition
-                                .name("temporary-contract-error")
-                                .targetState("PARKED_TEMPORARY_FAILURE")
-                                .condition(
-                                    ctx ->
-                                        ctx.resultCodeEquals(
-                                            "CONTRACT_SERVICE_TEMPORARY_UNAVAILABLE")))
                     .transition(
                         transition ->
                             transition
@@ -213,21 +197,13 @@ public class TransactionProcessConfiguration {
                 state
                     .action(actions::preparePostingLayout)
                     .retry(REST_RETRY)
+                    .retryExhaustedTargetState("PARKED_TEMPORARY_FAILURE")
                     .transition(
                         transition ->
                             transition
                                 .name("layout-ready")
                                 .targetState("SEND_POSTING_COMMAND")
                                 .condition(ctx -> ctx.resultCodeEquals("POSTING_LAYOUT_READY")))
-                    .transition(
-                        transition ->
-                            transition
-                                .name("temporary-account-error")
-                                .targetState("PARKED_TEMPORARY_FAILURE")
-                                .condition(
-                                    ctx ->
-                                        ctx.resultCodeEquals(
-                                            "ACCOUNT_SERVICE_TEMPORARY_UNAVAILABLE")))
                     .transition(
                         transition ->
                             transition

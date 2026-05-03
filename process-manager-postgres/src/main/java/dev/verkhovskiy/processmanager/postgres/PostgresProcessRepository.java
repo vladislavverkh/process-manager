@@ -85,6 +85,7 @@ public class PostgresProcessRepository {
   }
 
   /** Вставляет новый экземпляр процесса. */
+  @SuppressWarnings("unused")
   public void insertInstance(StoredProcessInstance instance) {
     jdbc.update(
         """
@@ -509,6 +510,7 @@ public class PostgresProcessRepository {
   }
 
   /** Удаляет все ожидания для экземпляра процесса. */
+  @SuppressWarnings("UnusedReturnValue")
   public int deleteWaits(UUID instanceId) {
     return jdbc.update(
         "delete from pm_process_wait where instance_id = :instanceId",
@@ -586,6 +588,7 @@ public class PostgresProcessRepository {
   }
 
   /** Помечает входящее событие как обработанное. */
+  @SuppressWarnings("UnusedReturnValue")
   public int markEventConsumed(UUID eventId) {
     return jdbc.update(
         """

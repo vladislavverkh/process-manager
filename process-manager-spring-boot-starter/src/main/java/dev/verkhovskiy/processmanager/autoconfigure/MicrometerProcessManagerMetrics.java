@@ -290,7 +290,7 @@ final class MicrometerProcessManagerMetrics implements ProcessManagerMetrics {
   }
 
   private static DistributionSummary.Builder summary(String name, String baseUnit) {
-    return DistributionSummary.builder(name);
+    return DistributionSummary.builder(name).baseUnit(baseUnit);
   }
 
   private static Duration duration(Duration duration) {

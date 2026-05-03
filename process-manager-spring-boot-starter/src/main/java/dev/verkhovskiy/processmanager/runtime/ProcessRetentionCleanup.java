@@ -16,6 +16,7 @@ public class ProcessRetentionCleanup {
   private final int batchSize;
   private final ProcessManagerMetrics metrics;
 
+  @SuppressWarnings("unused")
   public ProcessRetentionCleanup(PostgresProcessRepository processRepository, int batchSize) {
     this(processRepository, batchSize, NoopProcessManagerMetrics.INSTANCE);
   }

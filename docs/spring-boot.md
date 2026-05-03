@@ -12,7 +12,7 @@ process-manager-spring-boot-starter/src/main/resources/META-INF/spring/org.sprin
 
 Класс:
 
-```java
+```text
 ProcessManagerAutoConfiguration
 ```
 
@@ -89,7 +89,7 @@ class PaymentProcessConfiguration {
 Starter создает bean `ProcessInspector`. Он читает состояние без блокировок исполнения и не меняет
 runtime-данные:
 
-```java
+```text
 Optional<ProcessDetailsView> details = processInspector.findDetails(instanceId);
 
 List<ProcessInstanceView> waitingPayments =
@@ -107,7 +107,7 @@ List<ProcessInstanceView> waitingPayments =
 
 Starter создает bean `ProcessOperator` для операторских действий:
 
-```java
+```text
 processOperator.cancel(instanceId, "customer request");
 processOperator.scheduleResume(instanceId);
 processOperator.scheduleRetry(instanceId);
@@ -122,7 +122,7 @@ processOperator.scheduleRetry(instanceId);
 Starter создает bean `ProcessDeadlineWatchdog`. Приложение само задает расписание его запуска,
 например через Spring Scheduling:
 
-```java
+```text
 @Scheduled(fixedDelayString = "PT10S")
 void processDeadlines() {
   processDeadlineWatchdog.runOnce();
@@ -134,7 +134,7 @@ void processDeadlines() {
 Starter создает bean `ProcessRetentionCleanup`. Он удаляет terminal instances, у которых
 `delete_after <= clock_timestamp()` в PostgreSQL:
 
-```java
+```text
 @Scheduled(fixedDelayString = "PT1M")
 void cleanupRetainedProcesses() {
   processRetentionCleanup.runOnce();
@@ -166,7 +166,7 @@ Starter также регистрирует PostgreSQL-backed gauges:
 - `process.manager.instances.active`;
 - `process.manager.waits.active`;
 - `process.manager.events.unconsumed`;
-- `process.manager.deadline.overdue`.
+- `process.manager.deadline.overdue`;
 - `process.manager.retention.expired`.
 
 Для Prometheus endpoint приложение должно подключить Actuator и Prometheus registry:

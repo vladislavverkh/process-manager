@@ -1,7 +1,15 @@
 package dev.verkhovskiy.processmanager.runtime;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.actionData;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.actionTrigger;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.eventTrigger;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.processTimeoutTrigger;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.retryExhaustedTrigger;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.retryTrigger;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.stateTimeoutTrigger;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.timerTrigger;
+import static dev.verkhovskiy.processmanager.runtime.ProcessTriggerMetadata.triggerVariable;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.verkhovskiy.processmanager.ExternalEvent;
 import dev.verkhovskiy.processmanager.ProcessCommand;
@@ -27,10 +35,8 @@ import dev.verkhovskiy.processmanager.postgres.StoredProcessEvent;
 import dev.verkhovskiy.processmanager.postgres.StoredProcessInstance;
 import dev.verkhovskiy.processmanager.postgres.StoredProcessWait;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,12 +54,11 @@ public class PostgresProcessManager implements ProcessManager {
   private static final String LAST_EVENT_VARIABLE = "_pm.lastEvent";
   private static final String LAST_RETRY_VARIABLE = "_pm.lastRetry";
   private static final String RETRY_ATTEMPT_VARIABLE_PREFIX = "_pm.retry.";
-  private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private final ProcessDefinitionRegistry definitionRegistry;
   private final PostgresProcessRepository processRepository;
   private final ProcessCommandScheduler commandScheduler;
-  private final ObjectMapper objectMapper;
+  private final ProcessRuntimeJson runtimeJson;
   private final ProcessPayloadMapper payloadMapper;
   private final ProcessManagerMetrics metrics;
   private final TransitionSelector transitionSelector = new TransitionSelector();
@@ -91,7 +96,7 @@ public class PostgresProcessManager implements ProcessManager {
     this.definitionRegistry = definitionRegistry;
     this.processRepository = processRepository;
     this.commandScheduler = commandScheduler;
-    this.objectMapper = objectMapper;
+    this.runtimeJson = new ProcessRuntimeJson(objectMapper);
     this.payloadMapper =
         payloadMapper == null ? new JacksonProcessPayloadMapper(objectMapper) : payloadMapper;
     this.metrics = metrics == null ? NoopProcessManagerMetrics.INSTANCE : metrics;
@@ -165,7 +170,7 @@ public class PostgresProcessManager implements ProcessManager {
               eventType,
               correlationKey,
               normalizeIdempotencyKey(idempotencyKey),
-              toJson(payload));
+              runtimeJson.toJson(payload));
       if (!inserted) {
         metrics.recordEventReceived(eventType, "duplicate");
         return;
@@ -239,7 +244,8 @@ public class PostgresProcessManager implements ProcessManager {
             instance.status(),
             instance.version(),
             payload,
-            new ProcessVariables(readMap(instance.variablesJson(), "process variables")),
+            new ProcessVariables(
+                runtimeJson.readMap(instance.variablesJson(), "process variables")),
             instance.startedAt(),
             instance.processDeadlineAt(),
             instance.stateEnteredAt(),
@@ -382,7 +388,7 @@ public class PostgresProcessManager implements ProcessManager {
             event.get().eventType(),
             event.get().correlationKey(),
             event.get().idempotencyKey(),
-            readMap(event.get().payloadJson(), "event payload"),
+            runtimeJson.readMap(event.get().payloadJson(), "event payload"),
             event.get().receivedAt());
     ExecutionState<P> updated =
         advanceFromWait(
@@ -534,7 +540,7 @@ public class PostgresProcessManager implements ProcessManager {
             state.version(),
             stateDefinition.name(),
             terminalStatus,
-            toJson(variables.values()),
+            runtimeJson.toJson(variables.values()),
             now,
             null,
             now,
@@ -583,7 +589,7 @@ public class PostgresProcessManager implements ProcessManager {
             state.version(),
             targetState.name(),
             status,
-            toJson(state.variables().values()),
+            runtimeJson.toJson(state.variables().values()),
             stateEnteredAt,
             stateDeadlineAt,
             completedAt,
@@ -604,7 +610,7 @@ public class PostgresProcessManager implements ProcessManager {
             targetState.name(),
             transition.name(),
             triggerType,
-            toJson(trigger),
+            runtimeJson.toJson(trigger),
             now));
     metrics.recordTransition(
         definition.processType(),
@@ -654,7 +660,7 @@ public class PostgresProcessManager implements ProcessManager {
             stateWithTrigger.version(),
             stateDefinition.name(),
             ProcessInstanceStatus.WAITING,
-            toJson(stateWithTrigger.variables().values()),
+            runtimeJson.toJson(stateWithTrigger.variables().values()),
             now,
             stateDeadlineAt(stateDefinition, now),
             null,
@@ -707,7 +713,7 @@ public class PostgresProcessManager implements ProcessManager {
             stateWithTrigger.version(),
             stateDefinition.name(),
             ProcessInstanceStatus.WAITING,
-            toJson(stateWithTrigger.variables().values()),
+            runtimeJson.toJson(stateWithTrigger.variables().values()),
             now,
             stateDeadlineAt,
             null,
@@ -763,7 +769,7 @@ public class PostgresProcessManager implements ProcessManager {
             state.state(),
             "timer-scheduled",
             "TIMER_SCHEDULED",
-            toJson(timerTrigger(stateDefinition, state.stateDeadlineAt(), now)),
+            runtimeJson.toJson(timerTrigger(stateDefinition, state.stateDeadlineAt(), now)),
             now));
     metrics.recordTimerScheduled(definition.processType(), stateDefinition.name(), delay);
     return state;
@@ -812,7 +818,7 @@ public class PostgresProcessManager implements ProcessManager {
             state.version(),
             state.state(),
             ProcessInstanceStatus.RUNNING,
-            toJson(variables.values()),
+            runtimeJson.toJson(variables.values()),
             state.stateEnteredAt(),
             state.stateDeadlineAt(),
             null,
@@ -835,7 +841,7 @@ public class PostgresProcessManager implements ProcessManager {
             state.state(),
             "retry",
             "RETRY",
-            toJson(retryMetadata),
+            runtimeJson.toJson(retryMetadata),
             now));
     metrics.recordRetryScheduled(
         definition.processType(),
@@ -852,7 +858,8 @@ public class PostgresProcessManager implements ProcessManager {
       StateDefinition<P> stateDefinition,
       StepResult result,
       Instant now) {
-    Map<String, Object> retryMetadata = retryExhaustedTrigger(state, stateDefinition, result);
+    Map<String, Object> retryMetadata =
+        retryExhaustedTrigger(stateDefinition, result, retryAttemptValue(state, stateDefinition));
     ProcessVariables variables =
         state
             .variables()
@@ -941,7 +948,7 @@ public class PostgresProcessManager implements ProcessManager {
             toState,
             transitionName,
             triggerType,
-            toJson(trigger),
+            runtimeJson.toJson(trigger),
             now));
   }
 
@@ -973,32 +980,6 @@ public class PostgresProcessManager implements ProcessManager {
     return completedAt.plus(definition.retention().forStatus(status));
   }
 
-  private static Map<String, Object> actionTrigger(StepResult result) {
-    return switch (result.baseResult()) {
-      case StepResult.Success success ->
-          Map.of("kind", "SUCCESS", "code", success.code(), "data", success.data());
-      case StepResult.BusinessFailure failure ->
-          Map.of("kind", "BUSINESS_FAILURE", "code", failure.code(), "data", failure.data());
-      case StepResult.RetryableFailure failure ->
-          Map.of(
-              "kind",
-              "RETRYABLE_FAILURE",
-              "code",
-              failure.code(),
-              "message",
-              nullToEmpty(failure.message()));
-      case StepResult.FatalFailure failure ->
-          Map.of(
-              "kind",
-              "FATAL_FAILURE",
-              "code",
-              failure.code(),
-              "message",
-              nullToEmpty(failure.message()));
-      case StepResult.WithVariables withVariables -> actionTrigger(withVariables.delegate());
-    };
-  }
-
   private static String actionResultKind(StepResult result) {
     return switch (result.baseResult()) {
       case StepResult.Success ignored -> "SUCCESS";
@@ -1027,101 +1008,6 @@ public class PostgresProcessManager implements ProcessManager {
         .withAll(result.variableUpdates())
         .with(LAST_ACTION_RESULT_VARIABLE, actionTrigger)
         .with(LAST_TRIGGER_VARIABLE, triggerVariable("ACTION_RESULT", actionTrigger));
-  }
-
-  private static Map<String, Object> actionData(StepResult result) {
-    return switch (result.baseResult()) {
-      case StepResult.Success success -> success.data();
-      case StepResult.BusinessFailure failure -> failure.data();
-      case StepResult.RetryableFailure failure -> Map.of();
-      case StepResult.FatalFailure failure -> Map.of();
-      case StepResult.WithVariables withVariables -> actionData(withVariables.delegate());
-    };
-  }
-
-  private static Map<String, Object> eventTrigger(ExternalEvent event) {
-    Map<String, Object> trigger = new LinkedHashMap<>();
-    trigger.put("eventType", event.eventType());
-    trigger.put("correlationKey", event.correlationKey());
-    if (event.idempotencyKey() != null) {
-      trigger.put("idempotencyKey", event.idempotencyKey());
-    }
-    trigger.put("payload", event.payload());
-    trigger.put("receivedAt", event.receivedAt().toString());
-    return Map.copyOf(trigger);
-  }
-
-  private static Map<String, Object> processTimeoutTrigger(
-      String targetState, Instant deadlineAt, Instant triggeredAt) {
-    Map<String, Object> trigger = new LinkedHashMap<>();
-    trigger.put("targetState", targetState);
-    trigger.put("triggeredAt", triggeredAt.toString());
-    if (deadlineAt != null) {
-      trigger.put("deadlineAt", deadlineAt.toString());
-    }
-    return Map.copyOf(trigger);
-  }
-
-  private static Map<String, Object> stateTimeoutTrigger(
-      StateDefinition<?> stateDefinition, Instant deadlineAt, Instant triggeredAt) {
-    Map<String, Object> trigger = new LinkedHashMap<>();
-    trigger.put("state", stateDefinition.name());
-    if (stateDefinition.eventType() != null) {
-      trigger.put("eventType", stateDefinition.eventType());
-    }
-    if (stateDefinition.timeoutTargetState() != null) {
-      trigger.put("targetState", stateDefinition.timeoutTargetState());
-    }
-    if (deadlineAt != null) {
-      trigger.put("deadlineAt", deadlineAt.toString());
-    }
-    trigger.put("triggeredAt", triggeredAt.toString());
-    return Map.copyOf(trigger);
-  }
-
-  private static Map<String, Object> timerTrigger(
-      StateDefinition<?> stateDefinition, Instant deadlineAt, Instant triggeredAt) {
-    Map<String, Object> trigger = new LinkedHashMap<>();
-    trigger.put("state", stateDefinition.name());
-    trigger.put("targetState", stateDefinition.timeoutTargetState());
-    trigger.put("delay", stateDefinition.stateTimeout().toString());
-    trigger.put("delayMillis", stateDefinition.stateTimeout().toMillis());
-    if (deadlineAt != null) {
-      trigger.put("deadlineAt", deadlineAt.toString());
-    }
-    trigger.put("triggeredAt", triggeredAt.toString());
-    return Map.copyOf(trigger);
-  }
-
-  private static Map<String, Object> retryTrigger(
-      StateDefinition<?> stateDefinition, StepResult result, int nextAttempt, Duration delay) {
-    Map<String, Object> retry = new LinkedHashMap<>();
-    retry.put("state", stateDefinition.name());
-    retry.put("attempt", nextAttempt);
-    retry.put("maxAttempts", stateDefinition.retryPolicy().maxAttempts());
-    retry.put("delay", delay.toString());
-    retry.put("delayMillis", delay.toMillis());
-    retry.put("failure", actionTrigger(result));
-    return Map.copyOf(retry);
-  }
-
-  private static Map<String, Object> retryExhaustedTrigger(
-      ExecutionState<?> state, StateDefinition<?> stateDefinition, StepResult result) {
-    Map<String, Object> retry = new LinkedHashMap<>();
-    retry.put("state", stateDefinition.name());
-    retry.put("attempt", retryAttemptValue(state, stateDefinition));
-    retry.put("maxAttempts", stateDefinition.retryPolicy().maxAttempts());
-    retry.put("targetState", stateDefinition.retryExhaustedTargetState());
-    retry.put("failure", actionTrigger(result));
-    return Map.copyOf(retry);
-  }
-
-  private static Map<String, Object> triggerVariable(
-      String triggerType, Map<String, Object> trigger) {
-    Map<String, Object> value = new LinkedHashMap<>();
-    value.put("type", triggerType);
-    value.putAll(trigger == null ? Map.of() : trigger);
-    return Map.copyOf(value);
   }
 
   private static <P> TransitionDefinition<P> syntheticTransition(String name, String targetState) {
@@ -1163,32 +1049,9 @@ public class PostgresProcessManager implements ProcessManager {
     return Duration.between(start, end);
   }
 
-  private static String nullToEmpty(String value) {
-    return value == null ? "" : value;
-  }
-
-  private Map<String, Object> readMap(String json, String valueName) {
-    if (json == null || json.isBlank()) {
-      return Map.of();
-    }
-    try {
-      return objectMapper.readValue(json, MAP_TYPE);
-    } catch (IOException e) {
-      throw new IllegalArgumentException("Cannot deserialize " + valueName, e);
-    }
-  }
-
   @SuppressWarnings("unchecked")
   private static <P> ProcessDefinition<P> typed(ProcessDefinition<?> definition) {
     return (ProcessDefinition<P>) definition;
-  }
-
-  private String toJson(Object value) {
-    try {
-      return objectMapper.writeValueAsString(value == null ? Map.of() : value);
-    } catch (JsonProcessingException e) {
-      throw new IllegalArgumentException("Cannot serialize process payload", e);
-    }
   }
 
   private static String partitionKey(String processType, String key) {

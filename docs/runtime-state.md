@@ -41,7 +41,13 @@ version
 }
 ```
 
-Payload зависит от `processType` и `payloadSchemaVersion`.
+Payload зависит от `processType` и `payloadSchemaVersion`. Runtime хранит `payload_schema_version`
+отдельно от `definition_version`: граф процесса может меняться без изменения payload, а payload
+schema может развиваться как отдельный контракт. При `start(...)` payload проходит через
+`ProcessPayloadMapper`, который сериализует и валидирует данные перед записью. При `resume(...)`
+mapper получает сохраненный `payload_schema_version`; default Jackson mapper принимает только ту
+schema version, которая указана в `ProcessDefinition`, а кастомный mapper может реализовать
+совместимость или upcasting старых payload schemas.
 
 ### Variables
 

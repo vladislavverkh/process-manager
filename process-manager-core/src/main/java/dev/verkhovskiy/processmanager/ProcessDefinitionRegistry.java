@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ProcessDefinitionRegistry {
 
   private final Map<DefinitionKey, ProcessDefinition<?>> definitions = new ConcurrentHashMap<>();
+  private final Map<PayloadKey, Class<?>> payloadTypes = new ConcurrentHashMap<>();
 
   public ProcessDefinitionRegistry(Collection<ProcessDefinition<?>> definitions) {
     definitions.forEach(this::register);
@@ -23,6 +24,21 @@ public class ProcessDefinitionRegistry {
               + definition.processType()
               + " v"
               + definition.version());
+    }
+    PayloadKey payloadKey =
+        new PayloadKey(definition.processType(), definition.payloadSchemaVersion());
+    Class<?> previousPayloadType = payloadTypes.putIfAbsent(payloadKey, definition.payloadType());
+    if (previousPayloadType != null && !previousPayloadType.equals(definition.payloadType())) {
+      definitions.remove(key, definition);
+      throw new ProcessDefinitionException(
+          "Conflicting payload type for "
+              + definition.processType()
+              + " payload schema v"
+              + definition.payloadSchemaVersion()
+              + ": "
+              + previousPayloadType.getName()
+              + " vs "
+              + definition.payloadType().getName());
     }
   }
 
@@ -44,4 +60,6 @@ public class ProcessDefinitionRegistry {
   }
 
   private record DefinitionKey(String processType, int version) {}
+
+  private record PayloadKey(String processType, int payloadSchemaVersion) {}
 }

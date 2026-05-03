@@ -13,6 +13,7 @@ import dev.verkhovskiy.processmanager.ProcessDefinitionException;
 import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
 import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
 import dev.verkhovskiy.processmanager.ProcessManager;
+import dev.verkhovskiy.processmanager.ProcessPayloadMapper;
 import dev.verkhovskiy.processmanager.ProcessVariables;
 import dev.verkhovskiy.processmanager.StateDefinition;
 import dev.verkhovskiy.processmanager.StateKind;
@@ -53,6 +54,7 @@ public class PostgresProcessManager implements ProcessManager {
   private final PostgresProcessRepository processRepository;
   private final ProcessCommandScheduler commandScheduler;
   private final ObjectMapper objectMapper;
+  private final ProcessPayloadMapper payloadMapper;
   private final ProcessManagerMetrics metrics;
   private final TransitionSelector transitionSelector = new TransitionSelector();
 
@@ -66,6 +68,7 @@ public class PostgresProcessManager implements ProcessManager {
         processRepository,
         commandScheduler,
         objectMapper,
+        null,
         NoopProcessManagerMetrics.INSTANCE);
   }
 
@@ -75,10 +78,22 @@ public class PostgresProcessManager implements ProcessManager {
       ProcessCommandScheduler commandScheduler,
       ObjectMapper objectMapper,
       ProcessManagerMetrics metrics) {
+    this(definitionRegistry, processRepository, commandScheduler, objectMapper, null, metrics);
+  }
+
+  public PostgresProcessManager(
+      ProcessDefinitionRegistry definitionRegistry,
+      PostgresProcessRepository processRepository,
+      ProcessCommandScheduler commandScheduler,
+      ObjectMapper objectMapper,
+      ProcessPayloadMapper payloadMapper,
+      ProcessManagerMetrics metrics) {
     this.definitionRegistry = definitionRegistry;
     this.processRepository = processRepository;
     this.commandScheduler = commandScheduler;
     this.objectMapper = objectMapper;
+    this.payloadMapper =
+        payloadMapper == null ? new JacksonProcessPayloadMapper(objectMapper) : payloadMapper;
     this.metrics = metrics == null ? NoopProcessManagerMetrics.INSTANCE : metrics;
   }
 
@@ -99,7 +114,7 @@ public class PostgresProcessManager implements ProcessManager {
               businessKey,
               definition.initialState(),
               ProcessInstanceStatus.RUNNING,
-              toJson(payload),
+              payloadMapper.serialize(definition, payload),
               "{}",
               now,
               now,
@@ -211,7 +226,9 @@ public class PostgresProcessManager implements ProcessManager {
 
   private <P> void execute(
       ProcessCommand command, StoredProcessInstance instance, ProcessDefinition<P> definition) {
-    P payload = fromJson(instance.payloadJson(), definition.payloadType(), "process payload");
+    P payload =
+        payloadMapper.deserialize(
+            definition, instance.payloadSchemaVersion(), instance.payloadJson());
     ExecutionState<P> state =
         new ExecutionState<>(
             instance.instanceId(),
@@ -1148,14 +1165,6 @@ public class PostgresProcessManager implements ProcessManager {
 
   private static String nullToEmpty(String value) {
     return value == null ? "" : value;
-  }
-
-  private <T> T fromJson(String json, Class<T> type, String valueName) {
-    try {
-      return objectMapper.readValue(json, type);
-    } catch (IOException e) {
-      throw new IllegalArgumentException("Cannot deserialize " + valueName, e);
-    }
   }
 
   private Map<String, Object> readMap(String json, String valueName) {

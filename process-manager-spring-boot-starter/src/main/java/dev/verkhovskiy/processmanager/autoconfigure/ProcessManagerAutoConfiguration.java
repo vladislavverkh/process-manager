@@ -7,8 +7,10 @@ import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
 import dev.verkhovskiy.processmanager.ProcessInspector;
 import dev.verkhovskiy.processmanager.ProcessManager;
 import dev.verkhovskiy.processmanager.ProcessOperator;
+import dev.verkhovskiy.processmanager.ProcessPayloadMapper;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessInspector;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
+import dev.verkhovskiy.processmanager.runtime.JacksonProcessPayloadMapper;
 import dev.verkhovskiy.processmanager.runtime.NoopProcessManagerMetrics;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessManager;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessOperator;
@@ -59,18 +61,32 @@ public class ProcessManagerAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  @ConditionalOnBean({PostgresProcessRepository.class, ProcessCommandScheduler.class})
+  @ConditionalOnBean(ObjectMapper.class)
+  ProcessPayloadMapper processPayloadMapper(ObjectMapper objectMapper) {
+    return new JacksonProcessPayloadMapper(objectMapper);
+  }
+
+  @Bean
+  @ConditionalOnMissingBean
+  @ConditionalOnBean({
+    PostgresProcessRepository.class,
+    ProcessCommandScheduler.class,
+    ObjectMapper.class,
+    ProcessPayloadMapper.class
+  })
   ProcessManager processManager(
       ProcessDefinitionRegistry definitionRegistry,
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
       ObjectMapper objectMapper,
+      ProcessPayloadMapper payloadMapper,
       ObjectProvider<ProcessManagerMetrics> metrics) {
     return new PostgresProcessManager(
         definitionRegistry,
         processRepository,
         commandScheduler,
         objectMapper,
+        payloadMapper,
         metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE));
   }
 

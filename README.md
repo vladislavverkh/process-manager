@@ -32,9 +32,11 @@ Kafka, scheduler в другой БД или собственный executor.
 - есть `ProcessOperator` для ручной отмены и ручного планирования resume/retry;
 - есть retention cleanup для terminal instances с истекшим `delete_after`;
 - есть Micrometer metrics для runtime, deadline watchdog, operator operations и PostgreSQL-backed gauges;
+- есть `ProcessPayloadMapper`: fail-fast validation на старте и проверка `payload_schema_version`
+  при resume;
 - есть отдельный модуль `process-manager-rest` с Operator REST API;
 - есть пример Spring Boot приложения `process-manager-sample-app`;
-- payload validation и полноценная retry-модель еще развиваются.
+- payload upcasters и полноценная retry-модель еще развиваются.
 
 ## Документация
 

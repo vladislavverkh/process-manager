@@ -23,7 +23,8 @@ ProcessManagerAutoConfiguration
 | `ProcessDefinitionRegistry` | Всегда, если включен starter |
 | `PostgresProcessRepository` | Есть `NamedParameterJdbcTemplate` |
 | `ProcessInspector` | Есть `PostgresProcessRepository` и `ObjectMapper` |
-| `ProcessManager` | Есть registry, repository, scheduler и `ObjectMapper` |
+| `ProcessPayloadMapper` | Есть `ObjectMapper` |
+| `ProcessManager` | Есть registry, repository, scheduler, `ObjectMapper` и `ProcessPayloadMapper` |
 | `ProcessOperator` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessDeadlineWatchdog` | Есть repository и scheduler |
 | `ProcessRetentionCleanup` | Есть `PostgresProcessRepository` |
@@ -35,6 +36,11 @@ ProcessManagerAutoConfiguration
 
 Если Micrometer отсутствует, runtime использует no-op recorder и продолжает работать без metrics
 backend.
+
+Default `ProcessPayloadMapper` использует Jackson, валидирует payload на `start(...)`, проверяет
+сохраненный `payload_schema_version` при `resume(...)` и десериализует payload в тип из
+`ProcessDefinition`. Приложение может объявить свой bean `ProcessPayloadMapper`, если нужны
+нестандартная валидация, совместимость старых schema versions или payload upcasters.
 
 ## Свойства
 

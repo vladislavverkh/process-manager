@@ -27,7 +27,8 @@
 - Basic execution loop:
   - load instance for update;
   - resolve definition by `processType + definitionVersion`;
-  - deserialize typed payload and variables;
+  - map typed payload by `processType + payloadSchemaVersion`;
+  - deserialize variables;
   - execute `ACTION`;
   - persist action result data and explicit variable updates;
   - persist last trigger data for action/event/timeout/retry;
@@ -66,6 +67,12 @@
   - scheduled cleanup runtime component;
   - cleanup batch-size property;
   - sample scheduled cleanup job.
+- Payload mapper:
+  - default Jackson mapper;
+  - fail-fast payload validation on `start`;
+  - stored `payload_schema_version` validation on `resume`;
+  - registry guard against conflicting Java payload types for one payload schema version;
+  - Spring Boot bean override point for custom mapping/upcasting.
 - Process definition validation:
   - required ACTION/WAIT/TERMINAL fields;
   - duplicate transition priorities;
@@ -78,9 +85,9 @@
 1. Довести retry execution:
    - document retry exhaustion semantics in more detail.
 
-2. Довести payload mapper:
-   - validation error handling;
-   - отделить `payload_schema_version` от `definition_version`.
+2. Довести payload evolution:
+   - payload upcaster API;
+   - policy for retiring old payload schema versions.
 
 3. Довести deadline watchdog:
    - определить политику escalation для процессов без timeout target.
@@ -97,7 +104,6 @@
 
 ## Позже
 
-- Payload upcasters для schema evolution.
 - Partitioned history tables.
 - YAML/JSON process definitions, если Java DSL станет недостаточным.
 - Outbox для команд во внешние системы, если понадобится exactly-once интеграция.

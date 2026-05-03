@@ -1,6 +1,7 @@
 package dev.verkhovskiy.processmanager.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -19,6 +20,7 @@ import dev.verkhovskiy.processmanager.ProcessCommandScheduler;
 import dev.verkhovskiy.processmanager.ProcessDefinition;
 import dev.verkhovskiy.processmanager.ProcessDefinitionRegistry;
 import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
+import dev.verkhovskiy.processmanager.ProcessPayloadMappingException;
 import dev.verkhovskiy.processmanager.ProcessRetention;
 import dev.verkhovskiy.processmanager.RetryPolicy;
 import dev.verkhovskiy.processmanager.StepResult;
@@ -91,6 +93,30 @@ class PostgresProcessManagerTest {
 
     assertThat(instanceId).isEqualTo(INSTANCE_ID);
     verify(commandScheduler, never()).schedule(any(), any());
+  }
+
+  @Test
+  void startRejectsPayloadThatDoesNotMatchDefinitionType() {
+    ProcessDefinition<AmountPayload> definition =
+        ProcessDefinition.builder("payment", AmountPayload.class)
+            .initialState("DONE")
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .build();
+    PostgresProcessManager manager =
+        new PostgresProcessManager(
+            new ProcessDefinitionRegistry(List.of(definition)),
+            processRepository,
+            commandScheduler,
+            objectMapper);
+
+    assertThatThrownBy(
+            () ->
+                manager.start(
+                    "payment", "payment-1", Map.of("paymentId", "pay-1", "amount", "not-a-number")))
+        .isInstanceOf(ProcessPayloadMappingException.class)
+        .hasMessageContaining("Cannot map process payload");
+    verify(processRepository, never()).insertInstanceIfActiveAbsent(any());
+    verifyNoInteractions(commandScheduler);
   }
 
   @Test
@@ -204,6 +230,43 @@ class PostgresProcessManagerTest {
         .containsEntry("kind", "SUCCESS")
         .containsEntry("code", "OK");
     assertThat(nested(variables, "_pm.lastTrigger")).containsEntry("type", "ACTION_RESULT");
+  }
+
+  @Test
+  void resumeRejectsStoredPayloadSchemaMismatchBeforeExecutingAction() {
+    AtomicBoolean actionExecuted = new AtomicBoolean();
+    ProcessDefinition<PaymentPayload> definition =
+        ProcessDefinition.builder("payment", PaymentPayload.class)
+            .version(1)
+            .payloadSchemaVersion(2)
+            .initialState("SEND")
+            .actionState(
+                "SEND",
+                state ->
+                    state
+                        .action(
+                            ctx -> {
+                              actionExecuted.set(true);
+                              return StepResult.success("OK");
+                            })
+                        .otherwise("DONE"))
+            .terminalState("DONE", ProcessInstanceStatus.COMPLETED)
+            .build();
+    PostgresProcessManager manager = manager(definition);
+    when(processRepository.findInstanceForUpdate(INSTANCE_ID))
+        .thenReturn(
+            Optional.of(
+                instanceWithPayloadSchemaVersion(
+                    "SEND", ProcessInstanceStatus.RUNNING, 0, 1, "{\"paymentId\":\"pay-1\"}")));
+
+    assertThatThrownBy(
+            () -> manager.resume(new ProcessCommand(INSTANCE_ID, ProcessCommandReason.START, 0)))
+        .isInstanceOf(ProcessPayloadMappingException.class)
+        .hasMessageContaining("storedPayloadSchemaVersion=1");
+    assertThat(actionExecuted).isFalse();
+    verify(processRepository, never())
+        .updateExecutionState(any(), anyLong(), any(), any(), any(), any(), any(), any(), any());
+    verifyNoInteractions(commandScheduler);
   }
 
   @Test
@@ -913,6 +976,32 @@ class PostgresProcessManagerTest {
         version);
   }
 
+  private static StoredProcessInstance instanceWithPayloadSchemaVersion(
+      String state,
+      ProcessInstanceStatus status,
+      long version,
+      int payloadSchemaVersion,
+      String payloadJson) {
+    return new StoredProcessInstance(
+        INSTANCE_ID,
+        "payment",
+        1,
+        payloadSchemaVersion,
+        "payment-1",
+        state,
+        status,
+        payloadJson,
+        "{}",
+        Instant.parse("2026-04-26T10:00:00Z"),
+        Instant.parse("2026-04-26T10:00:00Z"),
+        null,
+        Instant.parse("2026-04-26T10:00:00Z"),
+        null,
+        null,
+        null,
+        version);
+  }
+
   private Map<String, Object> jsonMap(String json) throws Exception {
     return objectMapper.readValue(json, mapType);
   }
@@ -923,4 +1012,6 @@ class PostgresProcessManagerTest {
   }
 
   private record PaymentPayload(String paymentId) {}
+
+  private record AmountPayload(String paymentId, long amount) {}
 }

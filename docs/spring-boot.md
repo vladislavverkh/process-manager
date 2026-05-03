@@ -26,9 +26,14 @@ ProcessManagerAutoConfiguration
 | `ProcessManager` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessOperator` | Есть registry, repository, scheduler и `ObjectMapper` |
 | `ProcessDeadlineWatchdog` | Есть repository и scheduler |
+| `ProcessManagerMetrics` | Есть Micrometer `MeterRegistry` |
+| PostgreSQL-backed metrics gauges | Есть Micrometer `MeterRegistry` и `PostgresProcessRepository` |
 
 `ProcessCommandScheduler` должен быть предоставлен приложением или отдельным adapter-модулем.
 Базовый starter не зависит от конкретной очереди команд.
+
+Если Micrometer отсутствует, runtime использует no-op recorder и продолжает работать без metrics
+backend.
 
 ## Свойства
 
@@ -122,6 +127,48 @@ void processDeadlines() {
   processDeadlineWatchdog.runOnce();
 }
 ```
+
+## Metrics
+
+При наличии Micrometer `MeterRegistry` starter публикует runtime metrics:
+
+- process lifecycle: `process.manager.instances.started`, `process.manager.instances.terminal`,
+  `process.manager.process.duration`;
+- command execution: `process.manager.commands.resumed`, `process.manager.resume.duration`,
+  `process.manager.execution.steps`, `process.manager.execution.max.steps.exceeded`;
+- state machine flow: `process.manager.action.duration`, `process.manager.transitions`,
+  `process.manager.state.duration`, `process.manager.optimistic.lock.conflicts`;
+- wait/event/timer/retry: `process.manager.waits.registered`, `process.manager.events.received`,
+  `process.manager.events.consumed`, `process.manager.timers.scheduled`,
+  `process.manager.timers.fired`, `process.manager.retries.scheduled`;
+- deadline/operator: `process.manager.deadline.scan.duration`,
+  `process.manager.deadline.commands.scheduled`, `process.manager.operator.operations`.
+
+Starter также регистрирует PostgreSQL-backed gauges:
+
+- `process.manager.instances.active`;
+- `process.manager.waits.active`;
+- `process.manager.events.unconsumed`;
+- `process.manager.deadline.overdue`.
+
+Для Prometheus endpoint приложение должно подключить Actuator и Prometheus registry:
+
+```kotlin
+implementation("org.springframework.boot:spring-boot-starter-actuator")
+runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+```
+
+Минимальная настройка exposure:
+
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+```
+
+В sample app эти зависимости, endpoint и Grafana dashboard уже настроены.
 
 ## Интеграция с task-queue-postgres
 

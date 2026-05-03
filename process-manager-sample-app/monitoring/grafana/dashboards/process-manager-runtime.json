@@ -1,0 +1,891 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "expr": "process_manager_instances_active",
+          "legendFormat": "active",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Processes",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "expr": "process_manager_waits_active",
+          "legendFormat": "waits",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Waits",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "expr": "process_manager_events_unconsumed",
+          "legendFormat": "events",
+          "refId": "A"
+        }
+      ],
+      "title": "Unconsumed Events",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "expr": "process_manager_deadline_overdue",
+          "legendFormat": "overdue",
+          "refId": "A"
+        }
+      ],
+      "title": "Overdue Deadlines",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (process_type, outcome) (rate(process_manager_instances_started_total[5m]))",
+          "legendFormat": "{{process_type}} {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Process Starts",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (process_type, state, status) (rate(process_manager_instances_terminal_total[5m]))",
+          "legendFormat": "{{process_type}} {{state}} {{status}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Terminal Processes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason, outcome) (rate(process_manager_commands_resumed_total[5m]))",
+          "legendFormat": "{{reason}} {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Command Resume Outcomes",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason, outcome) (rate(process_manager_resume_duration_seconds_sum[5m])) / sum by (reason, outcome) (rate(process_manager_resume_duration_seconds_count[5m]))",
+          "legendFormat": "{{reason}} {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Resume Duration Avg",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (state, result_kind, result_code) (rate(process_manager_action_duration_seconds_sum[5m])) / sum by (state, result_kind, result_code) (rate(process_manager_action_duration_seconds_count[5m]))",
+          "legendFormat": "{{state}} {{result_kind}} {{result_code}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Action Duration Avg",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (from_state, to_state, trigger_type) (rate(process_manager_transitions_total[5m]))",
+          "legendFormat": "{{from_state}} -> {{to_state}} {{trigger_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Transitions",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (state) (rate(process_manager_state_duration_seconds_sum[5m])) / sum by (state) (rate(process_manager_state_duration_seconds_count[5m]))",
+          "legendFormat": "{{state}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (state, status) (rate(process_manager_process_duration_seconds_sum[5m])) / sum by (state, status) (rate(process_manager_process_duration_seconds_count[5m]))",
+          "legendFormat": "process {{state}} {{status}}",
+          "refId": "B"
+        }
+      ],
+      "title": "State And Process Duration Avg",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (process_type) (rate(process_manager_execution_steps_sum[5m])) / sum by (process_type) (rate(process_manager_execution_steps_count[5m]))",
+          "legendFormat": "steps {{process_type}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (process_type) (rate(process_manager_execution_max_steps_exceeded_total[5m]))",
+          "legendFormat": "max steps {{process_type}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (state) (rate(process_manager_optimistic_lock_conflicts_total[5m]))",
+          "legendFormat": "conflict {{state}}",
+          "refId": "C"
+        }
+      ],
+      "title": "Runtime Health",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (state, result_code, attempt) (rate(process_manager_retries_scheduled_total[5m]))",
+          "legendFormat": "{{state}} {{result_code}} attempt {{attempt}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (state, result_code) (rate(process_manager_retries_delay_sum[5m])) / sum by (state, result_code) (rate(process_manager_retries_delay_count[5m]))",
+          "legendFormat": "delay {{state}} {{result_code}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Retries",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (event_type, outcome) (rate(process_manager_events_received_total[5m]))",
+          "legendFormat": "received {{event_type}} {{outcome}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (event_type) (rate(process_manager_events_consumed_total[5m]))",
+          "legendFormat": "consumed {{event_type}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (event_type) (rate(process_manager_waits_registered_total[5m]))",
+          "legendFormat": "wait {{event_type}}",
+          "refId": "C"
+        }
+      ],
+      "title": "Wait And Event Flow",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 44
+      },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (event_type) (rate(process_manager_events_matched_waits_sum[5m])) / sum by (event_type) (rate(process_manager_events_matched_waits_count[5m]))",
+          "legendFormat": "matched waits {{event_type}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (event_type) (rate(process_manager_event_consumption_lag_seconds_sum[5m])) / sum by (event_type) (rate(process_manager_event_consumption_lag_seconds_count[5m]))",
+          "legendFormat": "consumption lag {{event_type}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Event Matching",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 44
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (state) (rate(process_manager_timers_scheduled_total[5m]))",
+          "legendFormat": "scheduled {{state}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (state) (rate(process_manager_timers_fired_total[5m]))",
+          "legendFormat": "fired {{state}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (state) (rate(process_manager_timer_lag_sum[5m])) / sum by (state) (rate(process_manager_timer_lag_count[5m]))",
+          "legendFormat": "lag {{state}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum by (state) (rate(process_manager_timers_delay_sum[5m])) / sum by (state) (rate(process_manager_timers_delay_count[5m]))",
+          "legendFormat": "delay {{state}}",
+          "refId": "D"
+        }
+      ],
+      "title": "Timers",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 52
+      },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(process_manager_deadline_scan_duration_seconds_sum[5m]) / rate(process_manager_deadline_scan_duration_seconds_count[5m])",
+          "legendFormat": "scan duration",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(process_manager_deadline_scan_instances_sum[5m]) / rate(process_manager_deadline_scan_instances_count[5m])",
+          "legendFormat": "found instances",
+          "refId": "B"
+        }
+      ],
+      "title": "Deadline Scan",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 52
+      },
+      "id": 18,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(process_manager_deadline_commands_scheduled_total[5m]))",
+          "legendFormat": "scheduled {{reason}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (reason) (rate(process_manager_deadline_lag_sum[5m])) / sum by (reason) (rate(process_manager_deadline_lag_count[5m]))",
+          "legendFormat": "lag {{reason}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Deadline Commands",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 60
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (operation, outcome) (rate(process_manager_operator_operations_total[5m]))",
+          "legendFormat": "{{operation}} {{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Operator Operations",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": [
+    "process-manager",
+    "sample"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Process Manager Runtime",
+  "uid": "process-manager-runtime",
+  "version": 1,
+  "weekStart": ""
+}

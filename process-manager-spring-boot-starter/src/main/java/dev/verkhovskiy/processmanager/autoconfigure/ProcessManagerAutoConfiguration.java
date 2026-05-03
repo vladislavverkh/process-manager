@@ -9,10 +9,13 @@ import dev.verkhovskiy.processmanager.ProcessManager;
 import dev.verkhovskiy.processmanager.ProcessOperator;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessInspector;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
+import dev.verkhovskiy.processmanager.runtime.NoopProcessManagerMetrics;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessManager;
 import dev.verkhovskiy.processmanager.runtime.PostgresProcessOperator;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
+import dev.verkhovskiy.processmanager.runtime.ProcessManagerMetrics;
 import java.util.List;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -60,9 +63,14 @@ public class ProcessManagerAutoConfiguration {
       ProcessDefinitionRegistry definitionRegistry,
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      ObjectProvider<ProcessManagerMetrics> metrics) {
     return new PostgresProcessManager(
-        definitionRegistry, processRepository, commandScheduler, objectMapper);
+        definitionRegistry,
+        processRepository,
+        commandScheduler,
+        objectMapper,
+        metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE));
   }
 
   @Bean
@@ -72,9 +80,14 @@ public class ProcessManagerAutoConfiguration {
       ProcessDefinitionRegistry definitionRegistry,
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      ObjectProvider<ProcessManagerMetrics> metrics) {
     return new PostgresProcessOperator(
-        definitionRegistry, processRepository, commandScheduler, objectMapper);
+        definitionRegistry,
+        processRepository,
+        commandScheduler,
+        objectMapper,
+        metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE));
   }
 
   @Bean
@@ -83,8 +96,12 @@ public class ProcessManagerAutoConfiguration {
   ProcessDeadlineWatchdog processDeadlineWatchdog(
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
-      ProcessManagerProperties properties) {
+      ProcessManagerProperties properties,
+      ObjectProvider<ProcessManagerMetrics> metrics) {
     return new ProcessDeadlineWatchdog(
-        processRepository, commandScheduler, properties.getDeadlineBatchSize());
+        processRepository,
+        commandScheduler,
+        properties.getDeadlineBatchSize(),
+        metrics.getIfAvailable(() -> NoopProcessManagerMetrics.INSTANCE));
   }
 }

@@ -53,6 +53,7 @@ public class PostgresProcessManager implements ProcessManager {
   private final PostgresProcessRepository processRepository;
   private final ProcessCommandScheduler commandScheduler;
   private final ObjectMapper objectMapper;
+  private final ProcessManagerMetrics metrics;
   private final TransitionSelector transitionSelector = new TransitionSelector();
 
   public PostgresProcessManager(
@@ -60,51 +61,75 @@ public class PostgresProcessManager implements ProcessManager {
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
       ObjectMapper objectMapper) {
+    this(
+        definitionRegistry,
+        processRepository,
+        commandScheduler,
+        objectMapper,
+        NoopProcessManagerMetrics.INSTANCE);
+  }
+
+  public PostgresProcessManager(
+      ProcessDefinitionRegistry definitionRegistry,
+      PostgresProcessRepository processRepository,
+      ProcessCommandScheduler commandScheduler,
+      ObjectMapper objectMapper,
+      ProcessManagerMetrics metrics) {
     this.definitionRegistry = definitionRegistry;
     this.processRepository = processRepository;
     this.commandScheduler = commandScheduler;
     this.objectMapper = objectMapper;
+    this.metrics = metrics == null ? NoopProcessManagerMetrics.INSTANCE : metrics;
   }
 
   @Override
   @Transactional
   public UUID start(String processType, String businessKey, Object payload) {
     ProcessDefinition<?> definition = definitionRegistry.latest(processType);
-    StateDefinition<?> initialState = definition.state(definition.initialState());
-    UUID instanceId = UUID.randomUUID();
-    Instant now = Instant.now();
-    StoredProcessInstance newInstance =
-        new StoredProcessInstance(
-            instanceId,
-            definition.processType(),
-            definition.version(),
-            definition.payloadSchemaVersion(),
-            businessKey,
-            definition.initialState(),
-            ProcessInstanceStatus.RUNNING,
-            toJson(payload),
-            "{}",
-            now,
-            now,
-            deadlineAt(now, definition.processTimeout()),
-            now,
-            stateDeadlineAt(initialState, now),
-            null,
-            null,
-            0);
-    if (!processRepository.insertInstanceIfActiveAbsent(newInstance)) {
-      return processRepository
-          .findActiveInstance(definition.processType(), businessKey)
-          .map(StoredProcessInstance::instanceId)
-          .orElseThrow(
-              () ->
-                  new IllegalStateException(
-                      "Active process instance was not found after idempotent start conflict"));
+    try {
+      StateDefinition<?> initialState = definition.state(definition.initialState());
+      UUID instanceId = UUID.randomUUID();
+      Instant now = Instant.now();
+      StoredProcessInstance newInstance =
+          new StoredProcessInstance(
+              instanceId,
+              definition.processType(),
+              definition.version(),
+              definition.payloadSchemaVersion(),
+              businessKey,
+              definition.initialState(),
+              ProcessInstanceStatus.RUNNING,
+              toJson(payload),
+              "{}",
+              now,
+              now,
+              deadlineAt(now, definition.processTimeout()),
+              now,
+              stateDeadlineAt(initialState, now),
+              null,
+              null,
+              0);
+      if (!processRepository.insertInstanceIfActiveAbsent(newInstance)) {
+        UUID activeInstanceId =
+            processRepository
+                .findActiveInstance(definition.processType(), businessKey)
+                .map(StoredProcessInstance::instanceId)
+                .orElseThrow(
+                    () ->
+                        new IllegalStateException(
+                            "Active process instance was not found after idempotent start conflict"));
+        metrics.recordProcessStarted(definition.processType(), definition.version(), "duplicate");
+        return activeInstanceId;
+      }
+      commandScheduler.schedule(
+          new ProcessCommand(instanceId, ProcessCommandReason.START, 0),
+          partitionKey(processType, businessKey));
+      metrics.recordProcessStarted(definition.processType(), definition.version(), "created");
+      return instanceId;
+    } catch (RuntimeException e) {
+      metrics.recordProcessStarted(definition.processType(), definition.version(), "error");
+      throw e;
     }
-    commandScheduler.schedule(
-        new ProcessCommand(instanceId, ProcessCommandReason.START, 0),
-        partitionKey(processType, businessKey));
-    return instanceId;
   }
 
   @Override
@@ -117,21 +142,30 @@ public class PostgresProcessManager implements ProcessManager {
   @Transactional
   public void signal(
       String eventType, String correlationKey, String idempotencyKey, Map<String, Object> payload) {
-    UUID eventId = UUID.randomUUID();
-    boolean inserted =
-        processRepository.insertEvent(
-            eventId,
-            eventType,
-            correlationKey,
-            normalizeIdempotencyKey(idempotencyKey),
-            toJson(payload));
-    if (!inserted) {
-      return;
-    }
-    for (StoredProcessWait wait : processRepository.findWaits(eventType, correlationKey)) {
-      commandScheduler.schedule(
-          new ProcessCommand(wait.instanceId(), ProcessCommandReason.RESUME, -1),
-          partitionKey(wait.processType(), wait.instanceId().toString()));
+    try {
+      UUID eventId = UUID.randomUUID();
+      boolean inserted =
+          processRepository.insertEvent(
+              eventId,
+              eventType,
+              correlationKey,
+              normalizeIdempotencyKey(idempotencyKey),
+              toJson(payload));
+      if (!inserted) {
+        metrics.recordEventReceived(eventType, "duplicate");
+        return;
+      }
+      var waits = processRepository.findWaits(eventType, correlationKey);
+      for (StoredProcessWait wait : waits) {
+        commandScheduler.schedule(
+            new ProcessCommand(wait.instanceId(), ProcessCommandReason.RESUME, -1),
+            partitionKey(wait.processType(), wait.instanceId().toString()));
+      }
+      metrics.recordEventReceived(eventType, "inserted");
+      metrics.recordEventMatchedWaits(eventType, waits.size());
+    } catch (RuntimeException e) {
+      metrics.recordEventReceived(eventType, "error");
+      throw e;
     }
   }
 
@@ -144,22 +178,35 @@ public class PostgresProcessManager implements ProcessManager {
   @Override
   @Transactional
   public void resume(ProcessCommand command) {
-    StoredProcessInstance instance =
-        processRepository
-            .findInstanceForUpdate(command.instanceId())
-            .orElseThrow(
-                () ->
-                    new IllegalArgumentException(
-                        "Process instance not found: " + command.instanceId()));
-    if (command.expectedVersion() >= 0 && instance.version() != command.expectedVersion()) {
-      return;
+    long startedAtNanos = System.nanoTime();
+    String processType = "unknown";
+    String outcome = "error";
+    try {
+      Optional<StoredProcessInstance> found =
+          processRepository.findInstanceForUpdate(command.instanceId());
+      if (found.isEmpty()) {
+        outcome = "missing";
+        throw new IllegalArgumentException("Process instance not found: " + command.instanceId());
+      }
+      StoredProcessInstance instance = found.get();
+      processType = instance.processType();
+      if (command.expectedVersion() >= 0 && instance.version() != command.expectedVersion()) {
+        outcome = "stale_version";
+        return;
+      }
+      if (terminalInstanceStatus(instance.status())) {
+        outcome = "terminal";
+        return;
+      }
+      ProcessDefinition<?> definition =
+          definitionRegistry.get(instance.processType(), instance.definitionVersion());
+      execute(command, instance, typed(definition));
+      outcome = "executed";
+    } finally {
+      metrics.recordCommandResumed(processType, command.reason(), outcome);
+      metrics.recordResumeDuration(
+          processType, command.reason(), outcome, elapsedSince(startedAtNanos));
     }
-    if (terminalInstanceStatus(instance.status())) {
-      return;
-    }
-    ProcessDefinition<?> definition =
-        definitionRegistry.get(instance.processType(), instance.definitionVersion());
-    execute(command, instance, typed(definition));
   }
 
   private <P> void execute(
@@ -176,12 +223,14 @@ public class PostgresProcessManager implements ProcessManager {
             instance.version(),
             payload,
             new ProcessVariables(readMap(instance.variablesJson(), "process variables")),
+            instance.startedAt(),
             instance.processDeadlineAt(),
             instance.stateEnteredAt(),
             instance.stateDeadlineAt());
 
     boolean timeoutHandled = false;
     for (int step = 0; step < MAX_STEPS_PER_RESUME; step++) {
+      int executedSteps = step + 1;
       StateDefinition<P> stateDefinition = definition.state(state.state());
       Instant now = Instant.now();
       if (!timeoutHandled
@@ -189,6 +238,7 @@ public class PostgresProcessManager implements ProcessManager {
         state = handleProcessTimeout(definition, state, stateDefinition, now);
         timeoutHandled = true;
         if (state.parked()) {
+          metrics.recordExecutionSteps(definition.processType(), executedSteps);
           return;
         }
         continue;
@@ -198,6 +248,7 @@ public class PostgresProcessManager implements ProcessManager {
         state = handleStateTimeout(definition, state, stateDefinition, now);
         timeoutHandled = true;
         if (state.parked()) {
+          metrics.recordExecutionSteps(definition.processType(), executedSteps);
           return;
         }
         continue;
@@ -211,9 +262,12 @@ public class PostgresProcessManager implements ProcessManager {
             case TERMINAL -> enterTerminal(definition, state, stateDefinition);
           };
       if (state.parked()) {
+        metrics.recordExecutionSteps(definition.processType(), executedSteps);
         return;
       }
     }
+    metrics.recordExecutionSteps(definition.processType(), MAX_STEPS_PER_RESUME);
+    metrics.recordMaxStepsExceeded(definition.processType());
     throw new ProcessDefinitionException(
         "Process execution exceeded "
             + MAX_STEPS_PER_RESUME
@@ -227,6 +281,7 @@ public class PostgresProcessManager implements ProcessManager {
       StateDefinition<P> stateDefinition) {
     Instant now = Instant.now();
     ProcessContext<P> context = processContext(state, now);
+    long startedAtNanos = System.nanoTime();
     StepResult result;
     try {
       result = stateDefinition.action().execute(context);
@@ -237,6 +292,13 @@ public class PostgresProcessManager implements ProcessManager {
       throw new ProcessDefinitionException(
           "Action returned null result: " + stateDefinition.name());
     }
+    metrics.recordAction(
+        definition.processType(),
+        definition.version(),
+        stateDefinition.name(),
+        actionResultKind(result),
+        actionResultCode(result),
+        elapsedSince(startedAtNanos));
 
     ProcessVariables variables = applyActionVariables(state, result);
     ExecutionState<P> actionState = state.withVariables(variables);
@@ -312,6 +374,8 @@ public class PostgresProcessManager implements ProcessManager {
             Instant.now());
     if (updated.version() != state.version()) {
       processRepository.markEventConsumed(event.get().eventId());
+      metrics.recordEventConsumed(
+          event.get().eventType(), durationBetween(event.get().receivedAt(), Instant.now()));
     }
     return updated;
   }
@@ -413,15 +477,23 @@ public class PostgresProcessManager implements ProcessManager {
       StateDefinition<P> stateDefinition,
       Instant now) {
     Map<String, Object> trigger = timerTrigger(stateDefinition, state.stateDeadlineAt(), now);
-    return applyTransition(
-        definition,
-        state.withVariables(
-            state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("TIMER", trigger))),
-        stateDefinition,
-        timeoutTransition("timer-fired", stateDefinition.timeoutTargetState()),
-        "TIMER",
-        trigger,
-        now);
+    ExecutionState<P> updated =
+        applyTransition(
+            definition,
+            state.withVariables(
+                state.variables().with(LAST_TRIGGER_VARIABLE, triggerVariable("TIMER", trigger))),
+            stateDefinition,
+            timeoutTransition("timer-fired", stateDefinition.timeoutTargetState()),
+            "TIMER",
+            trigger,
+            now);
+    if (updated.version() != state.version()) {
+      metrics.recordTimerFired(
+          definition.processType(),
+          stateDefinition.name(),
+          durationBetween(state.stateDeadlineAt(), now));
+    }
+    return updated;
   }
 
   private <P> ExecutionState<P> enterTerminal(
@@ -447,9 +519,23 @@ public class PostgresProcessManager implements ProcessManager {
             now,
             deleteAfter(definition, terminalStatus, now));
     if (updated == 0) {
+      recordOptimisticLockConflict(state);
       return state.park();
     }
     insertHistory(state, null, stateDefinition.name(), "START", "START", Map.of(), now);
+    metrics.recordTransition(
+        definition.processType(),
+        definition.version(),
+        null,
+        stateDefinition.name(),
+        "START",
+        "START");
+    metrics.recordProcessTerminal(
+        definition.processType(),
+        definition.version(),
+        stateDefinition.name(),
+        terminalStatus,
+        durationBetween(state.startedAt(), now));
     return state
         .withVariables(variables)
         .withState(stateDefinition.name(), terminalStatus, state.version() + 1, now, null)
@@ -482,6 +568,7 @@ public class PostgresProcessManager implements ProcessManager {
             completedAt,
             deleteAfter);
     if (updated == 0) {
+      recordOptimisticLockConflict(state);
       return state.park();
     }
     if (fromState.kind() == StateKind.WAIT) {
@@ -498,6 +585,23 @@ public class PostgresProcessManager implements ProcessManager {
             triggerType,
             toJson(trigger),
             now));
+    metrics.recordTransition(
+        definition.processType(),
+        definition.version(),
+        fromState.name(),
+        targetState.name(),
+        transition.name(),
+        triggerType);
+    metrics.recordStateDuration(
+        definition.processType(), fromState.name(), durationBetween(state.stateEnteredAt(), now));
+    if (targetState.terminal()) {
+      metrics.recordProcessTerminal(
+          definition.processType(),
+          definition.version(),
+          targetState.name(),
+          status,
+          durationBetween(state.startedAt(), now));
+    }
 
     ExecutionState<P> updatedState =
         state.withState(
@@ -535,6 +639,7 @@ public class PostgresProcessManager implements ProcessManager {
             null,
             null);
     if (updated == 0) {
+      recordOptimisticLockConflict(state);
       return state.park();
     }
     insertHistory(
@@ -545,6 +650,13 @@ public class PostgresProcessManager implements ProcessManager {
         triggerType,
         trigger,
         now);
+    metrics.recordTransition(
+        state.processType(),
+        state.definitionVersion(),
+        null,
+        stateDefinition.name(),
+        stateDefinition.name(),
+        triggerType);
     return registerWait(
             stateWithTrigger.withState(
                 stateDefinition.name(),
@@ -580,6 +692,7 @@ public class PostgresProcessManager implements ProcessManager {
             null,
             null);
     if (updated == 0) {
+      recordOptimisticLockConflict(state);
       return state.park();
     }
     insertHistory(
@@ -590,6 +703,13 @@ public class PostgresProcessManager implements ProcessManager {
         triggerType,
         trigger,
         now);
+    metrics.recordTransition(
+        state.processType(),
+        state.definitionVersion(),
+        null,
+        stateDefinition.name(),
+        stateDefinition.name(),
+        triggerType);
     return scheduleTimer(
             definition,
             stateWithTrigger.withState(
@@ -624,6 +744,7 @@ public class PostgresProcessManager implements ProcessManager {
             "TIMER_SCHEDULED",
             toJson(timerTrigger(stateDefinition, state.stateDeadlineAt(), now)),
             now));
+    metrics.recordTimerScheduled(definition.processType(), stateDefinition.name(), delay);
     return state;
   }
 
@@ -643,6 +764,8 @@ public class PostgresProcessManager implements ProcessManager {
             correlationKey,
             expiresAt,
             now));
+    metrics.recordWaitRegistered(
+        state.processType(), stateDefinition.name(), stateDefinition.eventType());
     return state;
   }
 
@@ -674,6 +797,7 @@ public class PostgresProcessManager implements ProcessManager {
             null,
             null);
     if (updated == 0) {
+      recordOptimisticLockConflict(state);
       return state.park();
     }
     long nextVersion = state.version() + 1;
@@ -692,6 +816,12 @@ public class PostgresProcessManager implements ProcessManager {
             "RETRY",
             toJson(retryMetadata),
             now));
+    metrics.recordRetryScheduled(
+        definition.processType(),
+        stateDefinition.name(),
+        nextAttempt,
+        actionResultCode(result),
+        delay);
     return state.withVariables(variables).withVersion(nextVersion).park();
   }
 
@@ -826,6 +956,26 @@ public class PostgresProcessManager implements ProcessManager {
     };
   }
 
+  private static String actionResultKind(StepResult result) {
+    return switch (result.baseResult()) {
+      case StepResult.Success ignored -> "SUCCESS";
+      case StepResult.BusinessFailure ignored -> "BUSINESS_FAILURE";
+      case StepResult.RetryableFailure ignored -> "RETRYABLE_FAILURE";
+      case StepResult.FatalFailure ignored -> "FATAL_FAILURE";
+      case StepResult.WithVariables withVariables -> actionResultKind(withVariables.delegate());
+    };
+  }
+
+  private static String actionResultCode(StepResult result) {
+    return switch (result.baseResult()) {
+      case StepResult.Success success -> success.code();
+      case StepResult.BusinessFailure failure -> failure.code();
+      case StepResult.RetryableFailure failure -> failure.code();
+      case StepResult.FatalFailure failure -> failure.code();
+      case StepResult.WithVariables withVariables -> actionResultCode(withVariables.delegate());
+    };
+  }
+
   private static ProcessVariables applyActionVariables(ExecutionState<?> state, StepResult result) {
     Map<String, Object> actionTrigger = actionTrigger(result);
     return state
@@ -939,6 +1089,21 @@ public class PostgresProcessManager implements ProcessManager {
     return stateDefinition.kind() == StateKind.WAIT ? stateDefinition.waitTimeout() : null;
   }
 
+  private void recordOptimisticLockConflict(ExecutionState<?> state) {
+    metrics.recordOptimisticLockConflict(state.processType(), state.state());
+  }
+
+  private static Duration elapsedSince(long startedAtNanos) {
+    return Duration.ofNanos(System.nanoTime() - startedAtNanos);
+  }
+
+  private static Duration durationBetween(Instant start, Instant end) {
+    if (start == null || end == null || end.isBefore(start)) {
+      return Duration.ZERO;
+    }
+    return Duration.between(start, end);
+  }
+
   private static String nullToEmpty(String value) {
     return value == null ? "" : value;
   }
@@ -999,6 +1164,7 @@ public class PostgresProcessManager implements ProcessManager {
       long version,
       P payload,
       ProcessVariables variables,
+      Instant startedAt,
       Instant processDeadlineAt,
       Instant stateEnteredAt,
       Instant stateDeadlineAt,
@@ -1014,6 +1180,7 @@ public class PostgresProcessManager implements ProcessManager {
         long version,
         P payload,
         ProcessVariables variables,
+        Instant startedAt,
         Instant processDeadlineAt,
         Instant stateEnteredAt,
         Instant stateDeadlineAt) {
@@ -1027,6 +1194,7 @@ public class PostgresProcessManager implements ProcessManager {
           version,
           payload,
           variables,
+          startedAt,
           processDeadlineAt,
           stateEnteredAt,
           stateDeadlineAt,
@@ -1049,6 +1217,7 @@ public class PostgresProcessManager implements ProcessManager {
           newVersion,
           payload,
           variables,
+          startedAt,
           processDeadlineAt,
           newStateEnteredAt,
           newStateDeadlineAt,
@@ -1066,6 +1235,7 @@ public class PostgresProcessManager implements ProcessManager {
           newVersion,
           payload,
           variables,
+          startedAt,
           processDeadlineAt,
           stateEnteredAt,
           stateDeadlineAt,
@@ -1083,6 +1253,7 @@ public class PostgresProcessManager implements ProcessManager {
           version,
           payload,
           newVariables,
+          startedAt,
           processDeadlineAt,
           stateEnteredAt,
           stateDeadlineAt,
@@ -1100,6 +1271,7 @@ public class PostgresProcessManager implements ProcessManager {
           version,
           payload,
           variables,
+          startedAt,
           processDeadlineAt,
           stateEnteredAt,
           stateDeadlineAt,

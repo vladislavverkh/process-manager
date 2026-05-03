@@ -6,6 +6,7 @@ import dev.verkhovskiy.processmanager.ProcessCommandScheduler;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.postgres.StoredProcessInstance;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,17 +21,27 @@ public class ProcessDeadlineWatchdog {
   private final PostgresProcessRepository processRepository;
   private final ProcessCommandScheduler commandScheduler;
   private final int batchSize;
+  private final ProcessManagerMetrics metrics;
 
   public ProcessDeadlineWatchdog(
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
       int batchSize) {
+    this(processRepository, commandScheduler, batchSize, NoopProcessManagerMetrics.INSTANCE);
+  }
+
+  public ProcessDeadlineWatchdog(
+      PostgresProcessRepository processRepository,
+      ProcessCommandScheduler commandScheduler,
+      int batchSize,
+      ProcessManagerMetrics metrics) {
     if (batchSize <= 0) {
       throw new IllegalArgumentException("batchSize must be positive");
     }
     this.processRepository = processRepository;
     this.commandScheduler = commandScheduler;
     this.batchSize = batchSize;
+    this.metrics = metrics == null ? NoopProcessManagerMetrics.INSTANCE : metrics;
   }
 
   /** Обрабатывает один батч истекших дедлайнов с размером из конфигурации. */
@@ -45,15 +56,25 @@ public class ProcessDeadlineWatchdog {
     if (limit <= 0) {
       throw new IllegalArgumentException("limit must be positive");
     }
-    List<StoredProcessInstance> instances = processRepository.findExpiredDeadlinesForUpdate(limit);
-    Instant now = Instant.now();
-    for (StoredProcessInstance instance : instances) {
-      ProcessCommandReason reason = timeoutReason(instance, now);
-      commandScheduler.schedule(
-          new ProcessCommand(instance.instanceId(), reason, instance.version()),
-          partitionKey(instance.processType(), instance.businessKey()));
+    long startedAtNanos = System.nanoTime();
+    int foundInstances = 0;
+    try {
+      List<StoredProcessInstance> instances =
+          processRepository.findExpiredDeadlinesForUpdate(limit);
+      foundInstances = instances.size();
+      Instant now = Instant.now();
+      for (StoredProcessInstance instance : instances) {
+        ProcessCommandReason reason = timeoutReason(instance, now);
+        commandScheduler.schedule(
+            new ProcessCommand(instance.instanceId(), reason, instance.version()),
+            partitionKey(instance.processType(), instance.businessKey()));
+        metrics.recordDeadlineCommand(
+            instance.processType(), reason, deadlineLag(instance, reason, now));
+      }
+      return instances.size();
+    } finally {
+      metrics.recordDeadlineScan(elapsedSince(startedAtNanos), foundInstances);
     }
-    return instances.size();
   }
 
   private static ProcessCommandReason timeoutReason(
@@ -73,6 +94,22 @@ public class ProcessDeadlineWatchdog {
 
   private static boolean deadlineExpired(Instant deadlineAt, Instant triggeredAt) {
     return deadlineAt != null && !deadlineAt.isAfter(triggeredAt);
+  }
+
+  private static Duration deadlineLag(
+      StoredProcessInstance instance, ProcessCommandReason reason, Instant triggeredAt) {
+    Instant deadlineAt =
+        reason == ProcessCommandReason.PROCESS_TIMEOUT
+            ? instance.processDeadlineAt()
+            : instance.stateDeadlineAt();
+    if (deadlineAt == null || triggeredAt.isBefore(deadlineAt)) {
+      return Duration.ZERO;
+    }
+    return Duration.between(deadlineAt, triggeredAt);
+  }
+
+  private static Duration elapsedSince(long startedAtNanos) {
+    return Duration.ofNanos(System.nanoTime() - startedAtNanos);
   }
 
   private static String partitionKey(String processType, String key) {

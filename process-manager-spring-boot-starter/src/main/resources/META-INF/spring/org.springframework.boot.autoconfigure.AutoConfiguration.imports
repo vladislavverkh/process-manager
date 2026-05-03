@@ -1,1 +1,3 @@
+dev.verkhovskiy.processmanager.autoconfigure.ProcessManagerMicrometerAutoConfiguration
 dev.verkhovskiy.processmanager.autoconfigure.ProcessManagerAutoConfiguration
+dev.verkhovskiy.processmanager.autoconfigure.ProcessManagerPostgresMicrometerAutoConfiguration

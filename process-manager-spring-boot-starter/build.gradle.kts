@@ -34,10 +34,12 @@ dependencies {
     implementation("org.springframework:spring-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
+    compileOnly("io.micrometer:micrometer-core")
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
+    testImplementation("io.micrometer:micrometer-core")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

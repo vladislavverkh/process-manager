@@ -54,6 +54,12 @@
   - details and list endpoints for process instances;
   - manual cancel/resume/retry endpoints;
   - separate `process-manager-rest` module.
+- Observability:
+  - Micrometer runtime metrics;
+  - metrics for stale, terminal and missing commands;
+  - deadline watchdog metrics;
+  - PostgreSQL-backed gauges for active instances, waits, unconsumed events and overdue deadlines;
+  - Prometheus/Grafana setup in sample app.
 - Process definition validation:
   - required ACTION/WAIT/TERMINAL fields;
   - duplicate transition priorities;
@@ -64,29 +70,21 @@
 ## Ближайший MVP
 
 1. Довести retry execution:
-   - formalize retry counters/metadata;
    - route exhausted retry outcomes;
-   - add metrics for skipped stale commands.
+   - document retry exhaustion semantics.
 
 2. Довести payload mapper:
    - validation error handling;
    - отделить `payload_schema_version` от `definition_version`.
 
-3. Реализовать stale command handling:
-   - учитывать `expectedVersion`;
-   - безопасно пропускать устаревшие retry/timeout/resume commands;
-   - добавить метрики.
-
-4. Довести deadline watchdog:
-   - добавить метрики по просроченным process/state deadlines;
-   - добавить рекомендуемую scheduled-конфигурацию;
+3. Довести deadline watchdog:
    - определить политику escalation для процессов без timeout target.
 
 ## Следующие этапы
 
 1. Admin/observability:
    - aggregated summary по process instances;
-   - Micrometer metrics.
+   - alerting examples for Prometheus/Grafana.
 
 2. Retention job:
    - scheduled cleanup terminal instances;

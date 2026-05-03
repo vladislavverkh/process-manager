@@ -20,21 +20,26 @@
 6. Отправить команду на формирование проводки.
 7. Дождаться финального результата через polling или внешнее событие.
 
-Внешние REST/Kafka системы в примере заменены in-memory stubs, чтобы приложение запускалось без
-дополнительных сервисов кроме PostgreSQL.
+Внешние REST/Kafka системы в примере заменены in-memory stubs. Docker Compose поднимает PostgreSQL,
+Prometheus и Grafana; само Spring Boot приложение запускается отдельно.
 
 Действия по транзакции - это бизнесовые данные sample app. Они хранятся отдельно от process-manager
 state в таблице `sample_transaction_action` и создаются внутренним шагом
 `BUILD_TRANSACTION_ACTIONS`.
 
-## Запуск PostgreSQL
+## Запуск инфраструктуры
 
 ```bash
 docker compose -f process-manager-sample-app/docker-compose.yml up -d
 ```
 
-Compose публикует PostgreSQL на `localhost:54320`, чтобы не конфликтовать с локальным PostgreSQL на
-стандартном порту `5432`.
+Compose поднимает:
+
+- PostgreSQL 17 на `localhost:54320`, чтобы не конфликтовать с локальным PostgreSQL на стандартном
+  порту `5432`;
+- Prometheus 3.11 на `localhost:9091`, внутри compose-сети он доступен Grafana как
+  `http://prometheus:9090`;
+- Grafana 13.0 на `localhost:3000`.
 
 Если контейнер уже запускался до добавления Liquibase, пересоздайте volume:
 
@@ -64,6 +69,19 @@ OpenAPI JSON:
 
 ```text
 http://localhost:8080/v3/api-docs
+```
+
+Spring Boot Actuator Prometheus endpoint:
+
+```text
+http://localhost:8080/actuator/prometheus
+```
+
+Prometheus and Grafana:
+
+```text
+http://localhost:9091
+http://localhost:3000/d/process-manager-runtime/process-manager-runtime
 ```
 
 ## Happy Path: Polling

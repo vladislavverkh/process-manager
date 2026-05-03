@@ -690,6 +690,49 @@ public class PostgresProcessRepository {
         new MapSqlParameterSource("limit", limit));
   }
 
+  /** Считает активные экземпляры процессов для runtime gauges. */
+  public long countActiveInstances() {
+    return count(
+        """
+            select count(*)
+              from pm_process_instance
+             where status in ('RUNNING', 'WAITING')
+            """);
+  }
+
+  /** Считает активные точки ожидания внешних событий для runtime gauges. */
+  public long countActiveWaits() {
+    return count("select count(*) from pm_process_wait");
+  }
+
+  /** Считает необработанные inbox-события для runtime gauges. */
+  public long countUnconsumedEvents() {
+    return count(
+        """
+            select count(*)
+              from pm_process_event_inbox
+             where consumed_at is null
+            """);
+  }
+
+  /** Считает активные процессы с уже истекшим process/state deadline для runtime gauges. */
+  public long countOverdueDeadlines() {
+    return count(
+        """
+            with runtime_clock as (
+                select clock_timestamp() as now
+            )
+            select count(*)
+              from pm_process_instance
+             cross join runtime_clock
+             where status in ('RUNNING', 'WAITING')
+               and (
+                    (process_deadline_at is not null and process_deadline_at <= runtime_clock.now)
+                 or (state_deadline_at is not null and state_deadline_at <= runtime_clock.now)
+               )
+            """);
+  }
+
   private static MapSqlParameterSource instanceParameters(StoredProcessInstance instance) {
     return new MapSqlParameterSource()
         .addValue("instanceId", instance.instanceId())
@@ -718,6 +761,11 @@ public class PostgresProcessRepository {
 
   private static OffsetDateTime toOffsetDateTime(Instant instant) {
     return instant == null ? null : OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
+  }
+
+  private long count(String sql) {
+    Long count = jdbc.queryForObject(sql, new MapSqlParameterSource(), Long.class);
+    return count == null ? 0 : count;
   }
 
   private static boolean hasText(String value) {

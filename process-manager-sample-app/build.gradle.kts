@@ -23,8 +23,10 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.liquibase:liquibase-core")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
     runtimeOnly("org.postgresql:postgresql")
 }

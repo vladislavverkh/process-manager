@@ -16,6 +16,7 @@ import dev.verkhovskiy.processmanager.postgres.ProcessHistoryRecord;
 import dev.verkhovskiy.processmanager.postgres.StoredProcessInstance;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -37,63 +38,108 @@ public class PostgresProcessOperator implements ProcessOperator {
   private final PostgresProcessRepository processRepository;
   private final ProcessCommandScheduler commandScheduler;
   private final ObjectMapper objectMapper;
+  private final ProcessManagerMetrics metrics;
 
   public PostgresProcessOperator(
       ProcessDefinitionRegistry definitionRegistry,
       PostgresProcessRepository processRepository,
       ProcessCommandScheduler commandScheduler,
       ObjectMapper objectMapper) {
+    this(
+        definitionRegistry,
+        processRepository,
+        commandScheduler,
+        objectMapper,
+        NoopProcessManagerMetrics.INSTANCE);
+  }
+
+  public PostgresProcessOperator(
+      ProcessDefinitionRegistry definitionRegistry,
+      PostgresProcessRepository processRepository,
+      ProcessCommandScheduler commandScheduler,
+      ObjectMapper objectMapper,
+      ProcessManagerMetrics metrics) {
     this.definitionRegistry = definitionRegistry;
     this.processRepository = processRepository;
     this.commandScheduler = commandScheduler;
     this.objectMapper = objectMapper;
+    this.metrics = metrics == null ? NoopProcessManagerMetrics.INSTANCE : metrics;
   }
 
   @Override
   @Transactional
   public boolean cancel(UUID instanceId, String reason) {
-    Optional<StoredProcessInstance> found = processRepository.findInstanceForUpdate(instanceId);
-    if (found.isEmpty() || terminalStatus(found.get().status())) {
-      return false;
-    }
+    String processType = "unknown";
+    String outcome = "error";
+    try {
+      Optional<StoredProcessInstance> found = processRepository.findInstanceForUpdate(instanceId);
+      if (found.isEmpty()) {
+        outcome = "not_found";
+        return false;
+      }
+      if (terminalStatus(found.get().status())) {
+        processType = found.get().processType();
+        outcome = "terminal";
+        return false;
+      }
 
-    StoredProcessInstance instance = found.get();
-    ProcessDefinition<?> definition =
-        definitionRegistry.get(instance.processType(), instance.definitionVersion());
-    Instant now = Instant.now();
-    Map<String, Object> trigger = manualCancelTrigger(reason, now);
-    ProcessVariables variables =
-        new ProcessVariables(readMap(instance.variablesJson(), "process variables"))
-            .with(LAST_CANCEL_VARIABLE, trigger)
-            .with(LAST_TRIGGER_VARIABLE, triggerVariable("MANUAL_CANCEL", trigger));
+      StoredProcessInstance instance = found.get();
+      processType = instance.processType();
+      ProcessDefinition<?> definition =
+          definitionRegistry.get(instance.processType(), instance.definitionVersion());
+      Instant now = Instant.now();
+      Map<String, Object> trigger = manualCancelTrigger(reason, now);
+      ProcessVariables variables =
+          new ProcessVariables(readMap(instance.variablesJson(), "process variables"))
+              .with(LAST_CANCEL_VARIABLE, trigger)
+              .with(LAST_TRIGGER_VARIABLE, triggerVariable("MANUAL_CANCEL", trigger));
 
-    int updated =
-        processRepository.updateExecutionState(
-            instance.instanceId(),
-            instance.version(),
-            instance.state(),
-            ProcessInstanceStatus.CANCELLED,
-            toJson(variables.values()),
-            instance.stateEnteredAt(),
-            null,
-            now,
-            deleteAfter(definition, ProcessInstanceStatus.CANCELLED, now));
-    if (updated == 0) {
-      return false;
+      int updated =
+          processRepository.updateExecutionState(
+              instance.instanceId(),
+              instance.version(),
+              instance.state(),
+              ProcessInstanceStatus.CANCELLED,
+              toJson(variables.values()),
+              instance.stateEnteredAt(),
+              null,
+              now,
+              deleteAfter(definition, ProcessInstanceStatus.CANCELLED, now));
+      if (updated == 0) {
+        metrics.recordOptimisticLockConflict(instance.processType(), instance.state());
+        outcome = "conflict";
+        return false;
+      }
+      processRepository.deleteWaits(instance.instanceId());
+      processRepository.insertHistory(
+          new ProcessHistoryRecord(
+              UUID.randomUUID(),
+              instance.instanceId(),
+              instance.processType(),
+              instance.state(),
+              instance.state(),
+              "manual-cancel",
+              "MANUAL_CANCEL",
+              toJson(trigger),
+              now));
+      metrics.recordTransition(
+          instance.processType(),
+          instance.definitionVersion(),
+          instance.state(),
+          instance.state(),
+          "manual-cancel",
+          "MANUAL_CANCEL");
+      metrics.recordProcessTerminal(
+          instance.processType(),
+          instance.definitionVersion(),
+          instance.state(),
+          ProcessInstanceStatus.CANCELLED,
+          durationBetween(instance.startedAt(), now));
+      outcome = "success";
+      return true;
+    } finally {
+      metrics.recordOperatorOperation("cancel", processType, outcome);
     }
-    processRepository.deleteWaits(instance.instanceId());
-    processRepository.insertHistory(
-        new ProcessHistoryRecord(
-            UUID.randomUUID(),
-            instance.instanceId(),
-            instance.processType(),
-            instance.state(),
-            instance.state(),
-            "manual-cancel",
-            "MANUAL_CANCEL",
-            toJson(trigger),
-            now));
-    return true;
   }
 
   @Override
@@ -110,18 +156,33 @@ public class PostgresProcessOperator implements ProcessOperator {
 
   private boolean scheduleActiveCommand(
       UUID instanceId, ProcessCommandReason reason, boolean runningOnly) {
-    Optional<StoredProcessInstance> found = processRepository.findInstanceForUpdate(instanceId);
-    if (found.isEmpty() || terminalStatus(found.get().status())) {
-      return false;
+    String processType = "unknown";
+    String outcome = "error";
+    String operation = reason == ProcessCommandReason.RETRY ? "schedule_retry" : "schedule_resume";
+    try {
+      Optional<StoredProcessInstance> found = processRepository.findInstanceForUpdate(instanceId);
+      if (found.isEmpty()) {
+        outcome = "not_found";
+        return false;
+      }
+      StoredProcessInstance instance = found.get();
+      processType = instance.processType();
+      if (terminalStatus(instance.status())) {
+        outcome = "terminal";
+        return false;
+      }
+      if (runningOnly && instance.status() != ProcessInstanceStatus.RUNNING) {
+        outcome = "not_running";
+        return false;
+      }
+      commandScheduler.schedule(
+          new ProcessCommand(instance.instanceId(), reason, instance.version()),
+          partitionKey(instance.processType(), instance.businessKey()));
+      outcome = "scheduled";
+      return true;
+    } finally {
+      metrics.recordOperatorOperation(operation, processType, outcome);
     }
-    StoredProcessInstance instance = found.get();
-    if (runningOnly && instance.status() != ProcessInstanceStatus.RUNNING) {
-      return false;
-    }
-    commandScheduler.schedule(
-        new ProcessCommand(instance.instanceId(), reason, instance.version()),
-        partitionKey(instance.processType(), instance.businessKey()));
-    return true;
   }
 
   private Map<String, Object> readMap(String json, String valueName) {
@@ -169,6 +230,13 @@ public class PostgresProcessOperator implements ProcessOperator {
   private static Instant deleteAfter(
       ProcessDefinition<?> definition, ProcessInstanceStatus status, Instant completedAt) {
     return completedAt.plus(definition.retention().forStatus(status));
+  }
+
+  private static Duration durationBetween(Instant start, Instant end) {
+    if (start == null || end == null || end.isBefore(start)) {
+      return Duration.ZERO;
+    }
+    return Duration.between(start, end);
   }
 
   private static String partitionKey(String processType, String key) {

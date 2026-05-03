@@ -11,6 +11,9 @@ import dev.verkhovskiy.processmanager.ProcessManager;
 import dev.verkhovskiy.processmanager.ProcessOperator;
 import dev.verkhovskiy.processmanager.postgres.PostgresProcessRepository;
 import dev.verkhovskiy.processmanager.runtime.ProcessDeadlineWatchdog;
+import dev.verkhovskiy.processmanager.runtime.ProcessManagerMetrics;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -20,7 +23,11 @@ class ProcessManagerAutoConfigurationTest {
 
   private final ApplicationContextRunner contextRunner =
       new ApplicationContextRunner()
-          .withConfiguration(AutoConfigurations.of(ProcessManagerAutoConfiguration.class))
+          .withConfiguration(
+              AutoConfigurations.of(
+                  ProcessManagerMicrometerAutoConfiguration.class,
+                  ProcessManagerAutoConfiguration.class,
+                  ProcessManagerPostgresMicrometerAutoConfiguration.class))
           .withBean(ObjectMapper.class, ObjectMapper::new)
           .withBean(NamedParameterJdbcTemplate.class, () -> mock(NamedParameterJdbcTemplate.class))
           .withBean(ProcessCommandScheduler.class, () -> mock(ProcessCommandScheduler.class));
@@ -44,5 +51,21 @@ class ProcessManagerAutoConfigurationTest {
     contextRunner
         .withPropertyValues("process.manager.enabled=false")
         .run(context -> assertThat(context).doesNotHaveBean(ProcessManager.class));
+  }
+
+  @Test
+  void createsMicrometerMetricsWhenMeterRegistryExists() {
+    contextRunner
+        .withBean(MeterRegistry.class, SimpleMeterRegistry::new)
+        .run(
+            context -> {
+              assertThat(context).hasSingleBean(ProcessManagerMetrics.class);
+              assertThat(context).hasSingleBean(ProcessManagerPostgresMicrometerMeters.class);
+              MeterRegistry registry = context.getBean(MeterRegistry.class);
+              assertThat(registry.find("process.manager.instances.active").gauge()).isNotNull();
+              assertThat(registry.find("process.manager.waits.active").gauge()).isNotNull();
+              assertThat(registry.find("process.manager.events.unconsumed").gauge()).isNotNull();
+              assertThat(registry.find("process.manager.deadline.overdue").gauge()).isNotNull();
+            });
   }
 }

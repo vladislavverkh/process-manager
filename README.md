@@ -30,6 +30,7 @@ Kafka, scheduler в другой БД или собственный executor.
   `signal`;
 - есть `ProcessInspector` для чтения instance, wait points и history без изменения процесса;
 - есть `ProcessOperator` для ручной отмены и ручного планирования resume/retry;
+- есть Micrometer metrics для runtime, deadline watchdog, operator operations и PostgreSQL-backed gauges;
 - есть отдельный модуль `process-manager-rest` с Operator REST API;
 - есть пример Spring Boot приложения `process-manager-sample-app`;
 - payload validation и полноценная retry-модель еще развиваются.

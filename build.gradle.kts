@@ -30,6 +30,8 @@ subprojects {
         apply(plugin = "jacoco")
 
         dependencies.add("compileOnly", "com.github.spotbugs:spotbugs-annotations:4.9.8")
+        dependencies.add("compileOnly", "org.projectlombok:lombok:1.18.42")
+        dependencies.add("annotationProcessor", "org.projectlombok:lombok:1.18.42")
 
         extensions.configure<SpotlessExtension> {
             java {

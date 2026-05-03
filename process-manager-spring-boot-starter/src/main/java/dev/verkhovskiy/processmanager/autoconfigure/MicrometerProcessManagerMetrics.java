@@ -8,17 +8,16 @@ import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
 final class MicrometerProcessManagerMetrics implements ProcessManagerMetrics {
 
   private static final String UNKNOWN = "unknown";
   private static final String NONE = "none";
 
   private final MeterRegistry registry;
-
-  MicrometerProcessManagerMetrics(MeterRegistry registry) {
-    this.registry = registry;
-  }
 
   @Override
   public void recordProcessStarted(String processType, int definitionVersion, String outcome) {

@@ -3,6 +3,7 @@ package dev.verkhovskiy.processmanager.sample;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.sql.Date;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,13 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
     justification = "Зависимости являются внедренными инфраструктурными Spring-бинами.")
+@RequiredArgsConstructor
 public class TransactionActionRepository {
 
   private final JdbcTemplate jdbcTemplate;
-
-  public TransactionActionRepository(JdbcTemplate jdbcTemplate) {
-    this.jdbcTemplate = jdbcTemplate;
-  }
 
   @Transactional
   public void replaceByTransactionId(String transactionId, List<TransactionAction> actions) {

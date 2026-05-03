@@ -15,24 +15,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 
 /** PostgreSQL-реализация API чтения состояния процессов. */
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
     justification = "Зависимости являются внедренными инфраструктурными Spring-бинами.")
+@RequiredArgsConstructor
 public class PostgresProcessInspector implements ProcessInspector {
 
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private final PostgresProcessRepository processRepository;
   private final ObjectMapper objectMapper;
-
-  public PostgresProcessInspector(
-      PostgresProcessRepository processRepository, ObjectMapper objectMapper) {
-    this.processRepository = processRepository;
-    this.objectMapper = objectMapper;
-  }
 
   @Override
   @Transactional(readOnly = true)

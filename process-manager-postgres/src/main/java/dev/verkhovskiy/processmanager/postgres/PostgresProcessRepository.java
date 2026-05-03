@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
@@ -19,6 +20,7 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
     justification = "NamedParameterJdbcTemplate является внедренным инфраструктурным Spring-бином.")
+@RequiredArgsConstructor
 public class PostgresProcessRepository {
 
   private static final RowMapper<StoredProcessInstance> INSTANCE_MAPPER =
@@ -79,10 +81,6 @@ public class PostgresProcessRepository {
               toInstant(rs, "created_at"));
 
   private final NamedParameterJdbcTemplate jdbc;
-
-  public PostgresProcessRepository(NamedParameterJdbcTemplate jdbc) {
-    this.jdbc = jdbc;
-  }
 
   /** Вставляет новый экземпляр процесса. */
   @SuppressWarnings("unused")

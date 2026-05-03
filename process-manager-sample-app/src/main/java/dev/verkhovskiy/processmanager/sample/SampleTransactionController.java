@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,20 +26,12 @@ import org.springframework.web.bind.annotation.RestController;
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
     justification = "Зависимости являются внедренными инфраструктурными Spring-бинами.")
+@RequiredArgsConstructor
 public class SampleTransactionController {
 
   private final ProcessManager processManager;
   private final ProcessInspector processInspector;
   private final TransactionActionRepository actionRepository;
-
-  public SampleTransactionController(
-      ProcessManager processManager,
-      ProcessInspector processInspector,
-      TransactionActionRepository actionRepository) {
-    this.processManager = processManager;
-    this.processInspector = processInspector;
-    this.actionRepository = actionRepository;
-  }
 
   @PostMapping
   @Operation(summary = "Запустить обработку транзакции")

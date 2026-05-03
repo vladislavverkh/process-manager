@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -16,6 +17,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Component
+@RequiredArgsConstructor
 public class LocalProcessCommandScheduler implements ProcessCommandScheduler, DisposableBean {
 
   private static final Logger log = LoggerFactory.getLogger(LocalProcessCommandScheduler.class);
@@ -28,10 +30,6 @@ public class LocalProcessCommandScheduler implements ProcessCommandScheduler, Di
             thread.setDaemon(true);
             return thread;
           });
-
-  public LocalProcessCommandScheduler(ObjectProvider<ProcessManager> processManager) {
-    this.processManager = processManager;
-  }
 
   @Override
   public void schedule(ProcessCommand command, String partitionKey) {

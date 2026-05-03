@@ -4,6 +4,7 @@ import dev.verkhovskiy.processmanager.ProcessDetailsView;
 import dev.verkhovskiy.processmanager.ProcessInspector;
 import dev.verkhovskiy.processmanager.ProcessOperator;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,16 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 /** REST API для диагностики и ручных операторских действий над процессами. */
 @RestController
 @RequestMapping("/process-manager/processes")
+@RequiredArgsConstructor
 public class ProcessOperatorController {
 
   private final ProcessInspector processInspector;
   private final ProcessOperator processOperator;
-
-  public ProcessOperatorController(
-      ProcessInspector processInspector, ProcessOperator processOperator) {
-    this.processInspector = processInspector;
-    this.processOperator = processOperator;
-  }
 
   @GetMapping("/{instanceId}")
   public ResponseEntity<ProcessDetailsView> findDetails(

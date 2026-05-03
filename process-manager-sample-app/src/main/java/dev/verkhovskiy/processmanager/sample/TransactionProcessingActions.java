@@ -7,22 +7,18 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
     justification = "Зависимости являются внедренными инфраструктурными Spring-бинами.")
+@RequiredArgsConstructor
 public class TransactionProcessingActions {
 
   private final MockExternalSystems externalSystems;
   private final TransactionActionRepository actionRepository;
-
-  public TransactionProcessingActions(
-      MockExternalSystems externalSystems, TransactionActionRepository actionRepository) {
-    this.externalSystems = externalSystems;
-    this.actionRepository = actionRepository;
-  }
 
   public StepResult validateTransactionType(ProcessContext<TransactionPayload> context) {
     TransactionPayload payload = context.payload();

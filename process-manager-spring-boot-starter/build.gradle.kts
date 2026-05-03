@@ -35,8 +35,6 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind")
 
     compileOnly("io.micrometer:micrometer-core")
-    compileOnly("org.projectlombok:lombok")
-    annotationProcessor("org.projectlombok:lombok")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
     testImplementation("io.micrometer:micrometer-core")

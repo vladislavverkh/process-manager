@@ -7,23 +7,20 @@ import dev.verkhovskiy.processmanager.ProcessCommandScheduler;
 import dev.verkhovskiy.taskqueue.service.TaskProducer;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.time.Duration;
+import lombok.RequiredArgsConstructor;
 
 /** Планирует команды возобновления процесса через task-queue-postgres. */
 @SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
     justification =
         "TaskProducer и ObjectMapper являются внедренными инфраструктурными Spring-бинами.")
+@RequiredArgsConstructor
 public class TaskQueueProcessCommandScheduler implements ProcessCommandScheduler {
 
   public static final String TASK_TYPE = "process-manager.command";
 
   private final TaskProducer taskProducer;
   private final ObjectMapper objectMapper;
-
-  public TaskQueueProcessCommandScheduler(TaskProducer taskProducer, ObjectMapper objectMapper) {
-    this.taskProducer = taskProducer;
-    this.objectMapper = objectMapper;
-  }
 
   @Override
   public void schedule(ProcessCommand command, String partitionKey) {

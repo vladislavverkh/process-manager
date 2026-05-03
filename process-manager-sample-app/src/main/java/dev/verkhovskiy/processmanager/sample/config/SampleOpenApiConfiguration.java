@@ -1,4 +1,4 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.config;
 
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;

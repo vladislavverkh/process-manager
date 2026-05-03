@@ -1,6 +1,7 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.runtime;
 
 import dev.verkhovskiy.processmanager.runtime.ProcessRetentionCleanup;
+import dev.verkhovskiy.processmanager.sample.config.ProcessManagerLiquibaseConfiguration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.scheduling.annotation.Scheduled;

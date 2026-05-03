@@ -1,4 +1,4 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;

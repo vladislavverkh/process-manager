@@ -1,5 +1,6 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.persistence;
 
+import dev.verkhovskiy.processmanager.sample.domain.TransactionAction;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.sql.Date;
 import java.util.List;

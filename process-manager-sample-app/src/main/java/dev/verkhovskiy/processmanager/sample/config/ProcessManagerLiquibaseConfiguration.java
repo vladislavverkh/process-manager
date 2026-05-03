@@ -1,4 +1,4 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.config;
 
 import javax.sql.DataSource;
 import liquibase.integration.spring.SpringLiquibase;
@@ -9,8 +9,8 @@ import org.springframework.context.annotation.DependsOn;
 @Configuration(proxyBeanMethods = false)
 public class ProcessManagerLiquibaseConfiguration {
 
-  static final String LIQUIBASE_BEAN_NAME = "processManagerLiquibase";
-  static final String SAMPLE_LIQUIBASE_BEAN_NAME = "sampleAppLiquibase";
+  public static final String LIQUIBASE_BEAN_NAME = "processManagerLiquibase";
+  public static final String SAMPLE_LIQUIBASE_BEAN_NAME = "sampleAppLiquibase";
 
   @Bean(LIQUIBASE_BEAN_NAME)
   SpringLiquibase processManagerLiquibase(DataSource dataSource) {

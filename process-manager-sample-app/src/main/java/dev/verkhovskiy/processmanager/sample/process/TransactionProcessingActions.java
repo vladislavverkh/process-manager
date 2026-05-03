@@ -1,7 +1,11 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.process;
 
 import dev.verkhovskiy.processmanager.ProcessContext;
 import dev.verkhovskiy.processmanager.StepResult;
+import dev.verkhovskiy.processmanager.sample.domain.TransactionAction;
+import dev.verkhovskiy.processmanager.sample.domain.TransactionPayload;
+import dev.verkhovskiy.processmanager.sample.external.MockExternalSystems;
+import dev.verkhovskiy.processmanager.sample.persistence.TransactionActionRepository;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import java.math.BigDecimal;
 import java.util.List;

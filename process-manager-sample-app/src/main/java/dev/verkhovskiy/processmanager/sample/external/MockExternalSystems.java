@@ -1,5 +1,7 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.external;
 
+import dev.verkhovskiy.processmanager.sample.domain.TransactionAction;
+import dev.verkhovskiy.processmanager.sample.domain.TransactionPayload;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -133,11 +135,11 @@ public class MockExternalSystems {
       return new LookupResult(code, "", message);
     }
 
-    boolean success() {
+    public boolean success() {
       return "OK".equals(code);
     }
 
-    boolean temporaryError() {
+    public boolean temporaryError() {
       return code.endsWith("TEMPORARY_UNAVAILABLE");
     }
   }
@@ -160,11 +162,11 @@ public class MockExternalSystems {
       return new PostingLayoutResult(code, "", List.of(), message);
     }
 
-    boolean success() {
+    public boolean success() {
       return "OK".equals(code);
     }
 
-    boolean temporaryError() {
+    public boolean temporaryError() {
       return code.endsWith("TEMPORARY_UNAVAILABLE");
     }
   }

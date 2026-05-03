@@ -1,4 +1,4 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.runtime;
 
 import dev.verkhovskiy.processmanager.ProcessCommand;
 import dev.verkhovskiy.processmanager.ProcessCommandScheduler;

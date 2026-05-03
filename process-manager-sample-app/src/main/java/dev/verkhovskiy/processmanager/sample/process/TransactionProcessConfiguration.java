@@ -1,9 +1,10 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.process;
 
 import dev.verkhovskiy.processmanager.ProcessDefinition;
 import dev.verkhovskiy.processmanager.ProcessDefinitionBuilder;
 import dev.verkhovskiy.processmanager.ProcessInstanceStatus;
 import dev.verkhovskiy.processmanager.RetryPolicy;
+import dev.verkhovskiy.processmanager.sample.domain.TransactionPayload;
 import java.time.Duration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,11 +12,11 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 public class TransactionProcessConfiguration {
 
-  static final String PROCESS_TYPE = "sample-transaction-polling";
-  static final String POLLING_PROCESS_TYPE = PROCESS_TYPE;
-  static final String EVENT_PROCESS_TYPE = "sample-transaction-event";
-  static final String EVENT_POSTING_RESULT = "sample-transaction.posting-result";
-  static final String EVENT_RETRY_PARKED = "sample-transaction.retry-parked";
+  private static final String PROCESS_TYPE = "sample-transaction-polling";
+  public static final String POLLING_PROCESS_TYPE = PROCESS_TYPE;
+  public static final String EVENT_PROCESS_TYPE = "sample-transaction-event";
+  public static final String EVENT_POSTING_RESULT = "sample-transaction.posting-result";
+  public static final String EVENT_RETRY_PARKED = "sample-transaction.retry-parked";
 
   private static final RetryPolicy REST_RETRY =
       RetryPolicy.exponential(3, Duration.ofSeconds(1), Duration.ofSeconds(10));

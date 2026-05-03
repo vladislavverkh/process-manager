@@ -1,4 +1,4 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.domain;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;

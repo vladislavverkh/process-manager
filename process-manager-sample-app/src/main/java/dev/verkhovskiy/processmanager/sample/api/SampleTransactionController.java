@@ -1,10 +1,14 @@
-package dev.verkhovskiy.processmanager.sample;
+package dev.verkhovskiy.processmanager.sample.api;
 
 import dev.verkhovskiy.processmanager.ProcessDetailsView;
 import dev.verkhovskiy.processmanager.ProcessInspector;
 import dev.verkhovskiy.processmanager.ProcessInstanceQuery;
 import dev.verkhovskiy.processmanager.ProcessInstanceView;
 import dev.verkhovskiy.processmanager.ProcessManager;
+import dev.verkhovskiy.processmanager.sample.domain.TransactionAction;
+import dev.verkhovskiy.processmanager.sample.domain.TransactionPayload;
+import dev.verkhovskiy.processmanager.sample.persistence.TransactionActionRepository;
+import dev.verkhovskiy.processmanager.sample.process.TransactionProcessConfiguration;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

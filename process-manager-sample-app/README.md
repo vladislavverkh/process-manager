@@ -108,6 +108,24 @@ http://localhost:9091
 http://localhost:3000/d/process-manager-runtime/process-manager-runtime
 ```
 
+Prometheus alert rules are loaded from:
+
+```text
+process-manager-sample-app/monitoring/prometheus/rules/process-manager-alerts.yml
+```
+
+They cover the main process-manager runtime risks:
+
+- overdue process/state deadlines: `process_manager_deadline_overdue`;
+- optimistic lock conflicts growth: `process_manager_optimistic_lock_conflicts_total`;
+- retry spikes: `process_manager_retries_scheduled_total`;
+- missing commands: `process_manager_commands_resumed_total{outcome="missing"}`;
+- stale commands spike: `process_manager_commands_resumed_total{outcome="stale_version"}`.
+
+Grafana 13 shows these rules under Alerting as Prometheus datasource-managed alert rules.
+Notification delivery is intentionally not configured in the sample; production deployments should
+connect Prometheus to Alertmanager or route equivalent Grafana-managed rules to real contact points.
+
 ## Happy Path: Polling
 
 `completionMode` можно не передавать: по умолчанию используется `POLLING`.

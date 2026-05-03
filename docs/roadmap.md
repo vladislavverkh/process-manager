@@ -62,7 +62,9 @@
   - deadline watchdog metrics;
   - retention cleanup metrics;
   - PostgreSQL-backed gauges for active instances, waits, unconsumed events and overdue deadlines;
-  - Prometheus/Grafana setup in sample app.
+  - Prometheus/Grafana setup in sample app;
+  - Prometheus alert examples for overdue deadlines, optimistic lock conflicts, retry spikes and
+    stale/missing commands.
 - Retention cleanup:
   - scheduled cleanup runtime component;
   - cleanup batch-size property;
@@ -99,7 +101,6 @@
 
 1. Admin/observability:
    - aggregated summary по process instances;
-   - alerting examples for Prometheus/Grafana.
 
 ## Позже
 

@@ -197,7 +197,9 @@ management:
         include: health,info,metrics,prometheus
 ```
 
-В sample app эти зависимости, endpoint и Grafana dashboard уже настроены.
+В sample app эти зависимости, endpoint, Grafana dashboard и Prometheus alert rule examples уже
+настроены. Alert examples покрывают overdue deadlines, optimistic lock conflicts, retry spikes и
+stale/missing commands.
 
 ## Интеграция с task-queue-postgres
 

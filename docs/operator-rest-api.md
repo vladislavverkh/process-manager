@@ -25,6 +25,9 @@ process.manager.rest
 | --- | --- | --- |
 | `process.manager.rest.enabled` | `true` | Включает/отключает autoconfiguration Operator REST API |
 
+Модуль публикует Spring Boot configuration metadata, поэтому это свойство подсказывается в
+Spring Boot-aware IDE.
+
 Отключение:
 
 ```properties

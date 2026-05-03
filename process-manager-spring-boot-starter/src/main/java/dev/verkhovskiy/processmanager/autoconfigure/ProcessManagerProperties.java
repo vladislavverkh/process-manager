@@ -8,10 +8,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "process.manager")
 public class ProcessManagerProperties {
 
+  /** Включает или отключает autoconfiguration основного process-manager starter. */
   private boolean enabled = true;
 
+  /** Batch size одного прохода retention cleanup. */
   private int cleanupBatchSize = 100;
 
+  /** Batch size одного прохода deadline watchdog. */
   private int deadlineBatchSize = 100;
 
   public void setEnabled(boolean enabled) {

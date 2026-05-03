@@ -50,6 +50,9 @@ process.manager
 | `process.manager.cleanup-batch-size` | `100` | Batch size одного прохода retention cleanup |
 | `process.manager.deadline-batch-size` | `100` | Batch size одного прохода deadline watchdog |
 
+Starter публикует `META-INF/spring-configuration-metadata.json`, поэтому Spring Boot-aware IDE
+подсказывают эти свойства в `application.yml` и `application.properties`.
+
 ## Регистрация process definitions
 
 Сценарии регистрируются как Spring beans:
